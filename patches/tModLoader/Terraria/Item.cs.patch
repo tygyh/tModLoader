@@ -24,7 +24,7 @@
  {
  	private string _nameOverride;
  	public const int luckPotionDuration1 = 18000;
-@@ -37,78 +_,449 @@
+@@ -37,78 +_,455 @@
  	private readonly int eclipsePrice = sellPrice(0, 7, 50);
  	private readonly int eclipsePostPlanteraPrice = sellPrice(0, 10);
  	private readonly int eclipseMothronPrice = sellPrice(0, 12, 50);
@@ -161,7 +161,7 @@
 +	/// <summary>
 +	/// The numerical ID of the armor shader in <see cref="GameShaders.Armor"/> this item activates when worn in a dye slot.<br/>
 +	/// If greater than 0, then this item can be equipped into dye slots.<br/>
-+	/// Defaults to -1.<br/>
++	/// Defaults to 0.<br/>
 +	/// </summary>
 +	public int dye; //TML: Changed from byte to int.
 +
@@ -244,6 +244,11 @@
 +	/// </summary>
  	public bool isAShopItem;
 -	public short hairDye = -1;
++	/// <summary>
++	/// The numerical ID of the hair shader in <see cref="GameShaders.Hair"/> this item will apply to the player when used.<br/>
++	/// If greater than -1, then this item is a hair dye.<br/>
++	/// Defaults to -1.<br/>
++	/// </summary>
 +	public int hairDye = -1; //TML: Changed from short to int.
 +
 +	/// <summary>
@@ -264,7 +269,7 @@
 +	/// - <see cref="NPC.DropItemInstanced"/><br/>
 +	/// - <see cref="GameContent.ItemDropRules.CommonCode.DropItemLocalPerClientAndSetNPCMoneyTo0"/><br/>
 +	/// - <see cref="MessageID.InstancedItem"/><br/>
-+	/// Defaults to false.<br/>
++	/// Defaults to <see langword="false"/>.<br/>
 +	/// </summary>
  	public bool instanced;
  	public int ownIgnore = -1;
@@ -311,15 +316,15 @@
  	public bool accessory;
 +
 +	/// <summary>
-+	/// The time span of the using animation for the item in ticks. This is independant of the time it takes for the item to actually be used and potentially autoReused again. For weapons it is recommended to be the same as <see cref="useTime"/> as this is only the animation.
++	/// The time span of the using animation for the item in ticks. This is independent of the time it takes for the item to actually be used and potentially autoReused again. For weapons it is recommended to be the same as <see cref="useTime"/> as this is only the animation.
 +	/// <br/> Blocks use 15. Default value is 100. Terraria runs at 60 frames per second, so 15 is 1/4th of a second.
 +	/// </summary>
  	public int useAnimation;
 +
 +	/// <summary>
-+	/// The time span of using the item in ticks. This is independant of the time it takes for the item animation to finish. 
++	/// The time span of using the item in ticks. This is independent of the time it takes for the item animation to finish. 
 +	/// <br/> Blocks use 10. Default value is 100.
-+	/// <br/> Weapons usually have equal <see cref="useAnimation"/> and useTime, unequal values for these two results in multiple attacks per click. See <see href="https://github.com/tModLoader/tModLoader/blob/1.4/ExampleMod/Content/Items/Weapons/ExampleGun.cs#L111">ExampleGun.cs's Clockwork Assault Rifle example</see> for an example of that.
++	/// <br/> Weapons usually have equal <see cref="useAnimation"/> and useTime, unequal values for these two results in multiple attacks per click. See <see href="https://github.com/tModLoader/tModLoader/blob/1.4.4/ExampleMod/Content/Items/Weapons/ExampleGun.cs#L105">ExampleGun.cs's Clockwork Assault Rifle example</see> for an example of that.
 +	/// </summary>
  	public int useTime;
 +
@@ -439,7 +444,7 @@
  	public Color color;
 +
 +	/// <summary>
-+	/// Set to a value from 0 to 255 to control how transparant the item will appear when drawn. Gel uses 175, gemstone items use 50. 0 is opaque, and 255 is transparent. Note that this is the opposite of how alpha is typically expressed in computer graphics. Use <see cref="ModItem.GetAlpha(Color)"/> for more control over the resulting color.
++	/// Set to a value from 0 to 255 to control how transparent the item will appear when drawn. Gel uses 175, gemstone items use 50. 0 is opaque, and 255 is transparent. Note that this is the opposite of how alpha is typically expressed in computer graphics. Use <see cref="ModItem.GetAlpha(Color)"/> for more control over the resulting color.
 +	/// <br/> Defaults to 0.
 +	/// </summary>
  	public int alpha;
@@ -453,6 +458,7 @@
 +
 +	/// <summary>
 +	/// The size multiplier of the item's sprite while the item is being used. Also increases range for melee weapons.
++	/// <br/> Use <see cref="ModItem.ModifyItemScale(Player, ref float)"/> for dynamic scale values.
 +	/// <br/> Defaults to 1f.
 +	/// </summary>
  	public float scale = 1f;
@@ -478,7 +484,7 @@
  	public sbyte handOnSlot = -1;
  	public sbyte handOffSlot = -1;
  	public sbyte backSlot = -1;
-@@ -121,49 +_,238 @@
+@@ -121,49 +_,254 @@
  	public sbyte faceSlot = -1;
  	public sbyte balloonSlot = -1;
  	public sbyte beardSlot = -1;
@@ -517,8 +523,11 @@
  	public int shoot;
 +
 +	/// <summary>
-+	/// The velocity in pixels the projectile fired by this item will have. Actual velocity depends on the projectile being fired. If your weapon is shooting projectiles and they are stationary, change this to something like 10f. Throwing Knife uses 10f. Held projectiles like Vortex Beater use shootSpeed to determine how far away from the player to hold the projectile.
-+	/// <br/> Defaults to 0f.
++	/// The velocity in pixels the projectile fired by this item will have. If your weapon is shooting projectiles and they are stationary, change this to something like 10f and adjust as needed. Throwing Knife uses 10f.
++	/// <para/> Actual velocity depends on the projectile being fired, most notably the <see cref="Projectile.extraUpdates"/> value of that projectile. For example, <see cref="ItemID.LaserRifle"/> has <c>shootSpeed = 17f;</c> and shoots <see cref="ProjectileID.PurpleLaser"/>, which has <c>extraUpdates = 4;</c>, meaning 5 total updates per game tick. This projectile will have an effective velocity of 85 (because <c>17 * (1 + 4) == 85</c>). The <see href="https://terraria.wiki.gg/wiki/Velocity">Shoot Speed wiki page</see> has more information and examples of how these values work together in practice.
++	/// <para/> For weapons using ammo, the weapon's shootSpeed is added to the ammo's shootSpeed, so adjust ammo and weapon shootSpeed values accordingly. Consult the <see href="https://terraria.wiki.gg/wiki/Ammunition_items">Ammunition items wiki page</see> and wiki pages for the weapons that shoot various ammo for suitable values to use.
++	/// <para/> Held projectiles like Vortex Beater use shootSpeed to determine how far away from the player to hold the projectile.
++	/// <para/> Defaults to 0f.
 +	/// </summary>
  	public float shootSpeed;
 +
@@ -529,7 +538,7 @@
  	public int ammo = AmmoID.None;
 +
 +	/// <summary>
-+	/// If true and the item is ammo (sets <see cref="ammo"/> to something), the item will not count as ammo for certain ammo-specific behavior, such as the tooltip mentioning the item is ammo, or ammo items going into ammo slots first when picked up. Used for the Coin items, Ale, and Wire.
++	/// If true and the item is ammo (sets <see cref="ammo"/> to something), the item will not count as ammo for certain ammo-specific behavior, such as the tooltip mentioning the item is ammo, or ammo items going into ammo slots first when picked up. Used for the Coin items, Ale, and Sand Blocks.
 +	/// <br/> Defaults to <see langword="false"/>.
 +	/// </summary>
  	public bool notAmmo;
@@ -546,10 +555,14 @@
 +	/// </summary>
  	public int lifeRegen;
  	public int manaIncrease;
++	/// <summary>
++	/// Indicates that an item in a shop can only be bought once, meaning it is an item that has been sold to the NPC shop by the player.
++	/// </summary>
  	public bool buyOnce;
 +
 +	/// <summary>
-+	/// The amount of mana this item consumes on use. Use <see cref="ModItem.ModifyManaCost(Player, ref float, ref float)"/> for dynamic mana costs.
++	/// The amount of mana this item consumes on use.
++	/// <br/> Use <see cref="ModItem.ModifyManaCost(Player, ref float, ref float)"/> for dynamic mana costs.
 +	/// <br/> Defaults to 0.
 +	/// </summary>
  	public int mana;
@@ -570,6 +583,7 @@
 +	/// <summary>
 +	/// The number of copper coins this item is worth (aka, cost to buy from a merchant). Setting it to <c>10462</c> would mean the item cost 1 gold, 4 silver, and 62 copper. The sell price of an item is one fifth of its value. Value also influences reforge costs with the goblin tinkerer.
 +	/// <br/> For convenience, you can also use the <see cref="Item.buyPrice(int, int, int, int)"/> method for setting values: <c>Item.value = Item.buyPrice(0, 1, 4, 62);</c> You can also use the <see cref="Item.sellPrice(int, int, int, int)"/> method if you would rather think about an item's value the other way. Both <c>Item.buyPrice(0, 0, 10, 55)</c> and <c>Item.sellPrice(0, 0, 2, 11)</c> would set the value to <c>1055</c>.
++	/// <para/> If custom purchase prices disconnected from the item value are needed, <see cref="shopCustomPrice"/> should be set for the item instance added to a shop entry.
 +	/// </summary>
  	public int value;
  	public bool buy;
@@ -607,7 +621,7 @@
  	public int buffTime;
 +
 +	/// <summary>
-+	/// Specifies which mount to equip when the item is used. Assign to <c>ModContent.MountType&lt;ModdedMountHere&gt;()</c>. See <see href="https://github.com/tModLoader/tModLoader/blob/1.4/ExampleMod/Content/Items/ExampleMountItem.cs">ExampleMountItem.cs</see> for an example.
++	/// Specifies which mount to equip when the item is used. Assign to <c>ModContent.MountType&lt;ModdedMountHere&gt;()</c>. See <see href="https://github.com/tModLoader/tModLoader/blob/1.4.4/ExampleMod/Content/Items/ExampleMountItem.cs">ExampleMountItem.cs</see> for an example.
 +	/// <br/> Defaults to -1.
 +	/// </summary>
  	public int mountType = -1;
@@ -625,6 +639,7 @@
 +	/// The numerical ID of the special currency this item is bought using.<br/>
 +	/// To make an item bought using Defender Medals, set this to <see cref="CustomCurrencyID.DefenderMedals"/>.<br/>
 +	/// See <see href="https://github.com/tModLoader/tModLoader/search?q=ExampleCustomCurrencyId">ExampleCustomCurrencyId</see> for an example of creating and using a custom currency.<br/>
++	/// Must be used with <see cref="shopCustomPrice"/> assigning the price in terms of this custom currency.<br/>
 +	/// Defaults to -1, which means an item is bought using coins.<br/>
 +	/// </summary>
  	public int shopSpecialCurrency = -1;
@@ -632,12 +647,17 @@
 +	/// <summary>
 +	/// If not <see langword="null"/>, the custom value of the given item when being bought from a shop.<br/>
 +	/// Used for assigning a non-default price to an item in shops.<br/>
++	/// Can be used with <see cref="shopSpecialCurrency"/> to assign a price in terms of a custom currency instead of coins.<br/>
 +	/// To get the raw price of an item, use <see cref="GetStoreValue"/>.<br/>
-+	/// To get the price of an item after discounts, use <see cref="Player.GetItemExpectedPrice"/>.<br/>
-+	/// Defaults to <see langword="null"/>.<br/>
++	/// To get the price of an item after discounts, use <see cref="Player.GetItemExpectedPrice"/>.
++	/// <para/> Be careful of setting a custom price far below the normal <see cref="Item.value"/>, it could result in an infinite money exploit. For example, with maximum happiness and a discount card, a custom price 0.44 times the regular value would allow the user to sell the item for just barely more than it was bought for after leaving and reentering the world.
++	/// <para/> Defaults to <see langword="null"/>.
 +	/// </summary>
  	public int? shopCustomPrice;
  	public bool shootsEveryUse;
++	/// <summary>
++	/// If true, then the player won't swing the arm and item while attempting to use this item unless hovering over an Extractinator tile. This helps avoid misleading the player into thinking an item should do something when used. This and other properties common to extractinator-only items can be set using <see cref="Item.MakeUsableWithChlorophyteExtractinator"/>.
++	/// </summary>
  	public bool chlorophyteExtractinatorConsumable;
 +
 +	/// <summary>
@@ -651,6 +671,7 @@
 +
 +	/// <summary>
 +	/// The base critical chance for this item. Remember that the player has a base crit chance of 4.
++	/// <br/> Use <see cref="ModItem.ModifyWeaponCrit(Player, ref float)"/> for dynamic crit values.
 +	/// <br/> Defaults to 0
 +	/// </summary>
  	public int crit;
@@ -710,7 +731,8 @@
 +
 +	/// <summary>
 +	/// A delay in frames added at the end of the using animation for the item, during which the player wont be able to use any items.
-+	/// <br/> Defaults to 0.
++	/// <para/> One notable example usage is the <see cref="ItemID.ClockworkAssaultRifle"/> with a value of 14, but most other usages are smaller values like 2.
++	/// <para/> Defaults to 0.
 +	/// </summary>
  	public int reuseDelay;
  	public bool newAndShiny;
@@ -763,7 +785,7 @@
  	public bool PaintOrCoating {
  		get {
  			if (paint <= 0)
-@@ -196,11 +_,19 @@
+@@ -196,12 +_,24 @@
  
  	public bool FitsAccessoryVanitySlot => true;
  
@@ -774,15 +796,20 @@
  
  	public int OriginalDefense => ContentSamples.ItemsByType[type].defense;
 +	*/
-+
+ 
 +	public int OriginalRarity => ContentSamples.ItemsByType.TryGetValue(type, out Item item) ? item.rare : 0;
 +
 +	public int OriginalDamage => ContentSamples.ItemsByType.TryGetValue(type, out Item item) ? item.damage : 0;
 +
 +	public int OriginalDefense => ContentSamples.ItemsByType.TryGetValue(type, out Item item) ? item.defense : 0;
- 
++
++	/// <summary>
++	/// If not null, indicates that this item has a special seed variant active.
++	/// <para/> Item variants are not supported for modded items.
++	/// </summary>
  	public ItemVariant Variant { get; private set; }
  
+ 	public bool IsACoin {
 @@ -254,12 +_,27 @@
  		}
  	}
@@ -897,15 +924,16 @@
  		int rolledPrefix = prefixWeWant;
  		float dmg = 1f;
  		float kb = 1f;
-@@ -318,12 +_,18 @@
+@@ -318,12 +_,20 @@
  		bool flag = true;
  		while (flag) {
  			flag = false;
-+
-+			if (applyPrefixOverride is true) { } else
++			/*
  			if (rolledPrefix == -1 && unifiedRandom.Next(4) == 0)
--				rolledPrefix = 0;
-+				return true; //rolledPrefix = 0;
+ 				rolledPrefix = 0;
++			*/
++			if (applyPrefixOverride is not true && rolledPrefix == -1 && unifiedRandom.Next(4) == 0)
++				return true;
  
  			if (prefixWeWant < -1)
  				rolledPrefix = -1;
@@ -1044,7 +1072,7 @@
  	{
  		_ = type;
  		if (PrefixLegacy.ItemSets.SwordsHammersAxesPicks[type])
-@@ -750,16 +_,65 @@
+@@ -750,16 +_,66 @@
  		return null;
  	}
  
@@ -1053,6 +1081,7 @@
 +	/// Determines the <see cref="PrefixCategory"/> of this <see cref="Item"/>.
 +	/// </summary>
 +	/// <returns>The <see cref="PrefixCategory"/> of this <see cref="Item"/> or <see langword="null"/> if this <see cref="Item"/> doesn't have a category.</returns>
++	[Obsolete("Does not support items with multiple prefix categories, use GetPrefixCategories instead")]
 +	public PrefixCategory? GetPrefixCategory()
 +	{
 +		if (PrefixLegacy.ItemSets.SwordsHammersAxesPicks[type] || ItemLoader.MeleePrefix(this))
@@ -1240,6 +1269,14 @@
  				useStyle = 5;
  				autoReuse = true;
  				useAnimation = 30;
+@@ -11396,6 +_,7 @@
+ 				knockBack = 6.5f;
+ 				melee = true;
+ 				value = sellPrice(0, 3);
++				ChangePlayerDirectionOnShoot = false;// Added by tML
+ 				break;
+ 			case 724:
+ 				autoReuse = true;
 @@ -12077,6 +_,8 @@
  				scale = 1f;
  				break;
@@ -1276,6 +1313,14 @@
  	public void DefaultToQuestFish()
  	{
  		questItem = true;
+@@ -35265,6 +_,7 @@
+ 				rare = 2;
+ 				UseSound = SoundID.Item64;
+ 				mech = true;
++				ChangePlayerDirectionOnShoot = false;// Added by tML
+ 				return;
+ 			case 3612:
+ 				useStyle = 1;
 @@ -36886,6 +_,8 @@
  				shootSpeed = 17f;
  				return;
@@ -1292,7 +1337,7 @@
 +	/// <summary>
 +	/// This method sets a variety of Item values common to golf ball items.<br/>
 +	/// Specifically:<code>
-+	///	shoot = projid;
++	///	shoot = <paramref name="projid"/>;
 +	///	useStyle = <see cref="ItemUseStyleID.Swing"/>;
 +	///	shootSpeed = 12f;
 +	///	width = 18;
@@ -1331,6 +1376,15 @@
  				useStyle = 5;
  				autoReuse = true;
  				useAnimation = 30;
+@@ -44338,6 +_,8 @@
+ 				value = sellPrice(0, 0, 50);
+ 				break;
+ 			case 5134:
++				consumeAmmoOnLastShotOnly = true; // Added by TML
++
+ 				useStyle = 5;
+ 				autoReuse = true;
+ 				useAnimation = 30;
 @@ -46345,6 +_,20 @@
  		}
  	}
@@ -1344,7 +1398,7 @@
 +	///	height = 12;
 +	/// value = buyPrice(0, 0, 15);
 +	/// rare = 3;
-+	///	maxStack = CommonMaxStack;
++	///	maxStack = <see cref="CommonMaxStack"/>;
 +	///	consumable = true;
 +	/// </code>
 +	/// </summary>
@@ -1372,7 +1426,7 @@
 +	///	noUseGraphic = true;
 +	///	damage = dmg;
 +	///	knockBack = kb;
-+	///	shootSpeed = shootspeed;
++	///	shootSpeed = <paramref name="shootspeed"/>;
 +	/// </code>
 +	/// </summary>
 +	/// <param name="projectileId"></param>
@@ -1426,7 +1480,7 @@
 +	///	height = 40;
 +	///	UseSound = <see cref="SoundID.Item43"/>;
 +	/// </code>
-+	/// Addtionally: <br/><inheritdoc cref="DefaultToMagicWeapon" />
++	/// Additionally: <br/><inheritdoc cref="DefaultToMagicWeapon" />
 +	/// </summary>
 +	/// <param name="projType"></param>
 +	/// <param name="pushForwardSpeed">Passed into DefaultToMagicWeapon as the shotVelocity parameter</param>
@@ -1487,6 +1541,19 @@
  	{
  		useStyle = 1;
  		useTurn = true;
+@@ -46866,6 +_,12 @@
+ 		height = 12;
+ 	}
+ 
++	/// <summary>
++	/// This method conveniently sets <see cref="Item.damage"/>, <see cref="Item.knockBack"/>, and <see cref="Item.crit"/>.
++	/// </summary>
++	/// <param name="dmg"></param>
++	/// <param name="knockback"></param>
++	/// <param name="bonusCritChance"></param>
+ 	public void SetWeaponValues(int dmg, float knockback, int bonusCritChance = 0)
+ 	{
+ 		damage = dmg;
 @@ -46873,6 +_,14 @@
  		crit = bonusCritChance;
  	}
@@ -1494,7 +1561,7 @@
 +	/// <summary>
 +	/// This method sets a variety of Item values common to bow weapons.<br/>
 +	/// Specifically: <code>width = 14;<br/>height = 30;<br/>UseSound = SoundID.Item5;</code><br/>
-+	/// Addtionally: <br/><inheritdoc cref="DefaultToRangedWeapon(int,int,int,float,bool)" />
++	/// Additionally: <br/><inheritdoc cref="DefaultToRangedWeapon(int,int,int,float,bool)" />
 +	/// </summary>
 +	/// <param name="singleShotTime"></param>
 +	/// <param name="shotVelocity"></param>
@@ -1647,6 +1714,16 @@
  	public void DefaultToPlaceableTile(ushort tileIDToPlace, int tileStyleToPlace = 0)
  	{
  		createTile = tileIDToPlace;
+@@ -46959,6 +_,9 @@
+ 		consumable = true;
+ 	}
+ 
++	/// <summary>
++	/// Assigns properties common to extractinator-only items, ensuring a typical use animation when clicking on an Extractinator tile and no animation otherwise. Use this method for items that don't do anything when used but should be useable in an Extractinator. Most notably this sets <see cref="chlorophyteExtractinatorConsumable"/> to true.
++	/// </summary>
+ 	public void MakeUsableWithChlorophyteExtractinator()
+ 	{
+ 		useStyle = 1;
 @@ -46995,6 +_,27 @@
  		autoReuse = true;
  	}
@@ -1658,10 +1735,10 @@
 +	/// useStyle = useGulpSound ? <see cref="ItemUseStyleID.DrinkLiquid"/> : <see cref="ItemUseStyleID.EatFood"/>;
 +	/// useTurn = true;
 +	/// useAnimation = useTime = animationTime;
-+	/// maxStack = 30;
++	/// maxStack = <see cref="CommonMaxStack"/>;
 +	/// consumable = true;
-+	/// buffType = foodbuff;
-+	/// buffTime = foodbuffduration;
++	/// buffType = <paramref name="foodbuff"/>;
++	/// buffTime = <paramref name="foodbuffduration"/>;
 +	/// rare = <see cref="ItemRarityID.Blue"/>;
 +	/// value = 20 silver;
 +	/// </code>
@@ -1680,7 +1757,7 @@
  	}
  
 +	/// <summary>
-+	/// A helper method that sets item rarity and item value. 
++	/// A helper method that sets item rarity (<see cref="Item.rare"/>) and item value (<see cref="Item.value"/>). 
 +	/// </summary>
 +	/// <param name="rarity"></param>
 +	/// <param name="coinValue"></param>
@@ -1740,14 +1817,14 @@
 +		int originalType = type;
 +		int originalNetID = netID;
 +		var originalModItem = ModItem;
-+		var originalGlobals = globalItems;
++		var originalGlobals = _globals;
 +
 +		SetDefaults(TypeToClone);
 +
 +		type = originalType;
 +		netID = originalNetID;
 +		ModItem = originalModItem;
-+		globalItems = originalGlobals;
++		_globals = originalGlobals;
 +	}
 +
  	public void SetDefaults(int Type, bool noMatCheck = false, ItemVariant variant = null)
@@ -1814,16 +1891,17 @@
  		if (type == 5437)
  			SetDefaults(5358);
  	}
-@@ -47318,14 +_,30 @@
+@@ -47318,14 +_,33 @@
  	{
  		tooltipContext = -1;
  		BestiaryNotes = null;
 +
 +		// TML field initialization:
 +		ModItem = null;
-+		globalItems = new Instanced<GlobalItem>[0];
++		_globals = null;
 +		StatsModifiedBy = new();
 +		AllowReforgeForStackableItem = false;
++		useTurnOnAnimationStart = false;
 +		attackSpeedOnlyAffectsWeaponAnimation = false;
 +		useLimitPerAnimation = null;
 +		consumeAmmoOnFirstShotOnly = false;
@@ -1831,6 +1909,8 @@
 +		InterruptChannelOnHurt = false;
 +		StopAnimationOnHurt = false;
 +		DamageType = DamageClass.Default;
++		ChangePlayerDirectionOnShoot = true;
++		ArmorPenetration = 0;
 +
  		sentry = false;
  		hasVanityEffects = false;
@@ -1860,6 +1940,15 @@
  		placeStyle = 0;
  		buffTime = 0;
  		buffType = 0;
+@@ -47366,7 +_,7 @@
+ 		noUseGraphic = false;
+ 		lifeRegen = 0;
+ 		shootSpeed = 0f;
+-		active = true;
++		active = Type != 0;
+ 		alpha = 0;
+ 		ammo = AmmoID.None;
+ 		useAmmo = AmmoID.None;
 @@ -47426,6 +_,9 @@
  
  	public Color GetAlpha(Color newColor)
@@ -1870,6 +1959,16 @@
  		if (ItemID.Sets.BossBag[type])
  			return Color.Lerp(newColor, Color.White, 0.4f);
  
+@@ -47623,6 +_,9 @@
+ 		return new Color(num, num2, num3, num4);
+ 	}
+ 
++	/// <summary>
++	/// Use to check if a mechanism is allowed to spawn an Item of the provided type at the provided world coordinates. Checks nearby area to see if the <see href="https://terraria.wiki.gg/wiki/Statues#Spawn_limits">Spawn Limits</see> have been reached.
++	/// </summary>
+ 	public static bool MechSpawn(float x, float y, int type)
+ 	{
+ 		int num = 0;
 @@ -47649,7 +_,18 @@
  		return true;
  	}
@@ -1889,6 +1988,35 @@
  	public static int sellPrice(int platinum = 0, int gold = 0, int silver = 0, int copper = 0) => (copper + silver * 100 + gold * 100 * 100 + platinum * 100 * 100 * 100) * 5;
  
  	public bool CanShimmer()
+@@ -47668,7 +_,7 @@
+ 		if (type == 3461 || createTile == 139)
+ 			flag = true;
+ 
+-		if (!flag && ItemID.Sets.ShimmerTransformToItem[shimmerEquivalentType] <= 0 && FindDecraftAmount() <= 0 && !ItemID.Sets.CommonCoin[type])
++		if (!flag && ItemID.Sets.ShimmerTransformToItem[shimmerEquivalentType] <= 0 && FindDecraftAmount() <= 0 && ItemID.Sets.CoinLuckValue[type] <= 0)
+ 			return makeNPC > 0;
+ 
+ 		return true;
+@@ -47723,7 +_,9 @@
+ 	{
+ 		int shimmerEquivalentType = GetShimmerEquivalentType();
+ 		int decraftingRecipeIndex = ShimmerTransforms.GetDecraftingRecipeIndex(shimmerEquivalentType);
+-		if (ItemID.Sets.CommonCoin[shimmerEquivalentType]) {
++		if (ItemID.Sets.CoinLuckValue[shimmerEquivalentType] > 0) {
++			stack *= ItemID.Sets.CoinLuckValue[shimmerEquivalentType];
++			/*
+ 			switch (shimmerEquivalentType) {
+ 				case 72:
+ 					stack *= 100;
+@@ -47737,6 +_,8 @@
+ 					stack *= 1000000;
+ 					break;
+ 			}
++			*/
++			// patch context for CoinLuckValue
+ 
+ 			Main.player[Main.myPlayer].AddCoinLuck(base.Center, stack);
+ 			NetMessage.SendData(146, -1, -1, null, 1, (int)base.Center.X, (int)base.Center.Y, stack);
 @@ -47857,7 +_,7 @@
  			int num13 = FindDecraftAmount();
  			Recipe recipe = Main.recipe[decraftingRecipeIndex];
@@ -2044,7 +2172,7 @@
  		}
  
 -		if (Type > 0 && cachedItemSpawnsByType[Type] != -1) {
-+		if (itemToClone != null && Type > 0 && cachedItemSpawnsByType[Type] != -1) {
++		if (itemToClone == null && Type > 0 && cachedItemSpawnsByType[Type] != -1) {
  			cachedItemSpawnsByType[Type] += Stack;
  			return 400;
  		}
@@ -2098,7 +2226,7 @@
  
  					if (num2 > num3) {
  						num2 = num3;
-@@ -49266,10 +_,32 @@
+@@ -49266,10 +_,30 @@
  		}
  	}
  
@@ -2114,9 +2242,7 @@
 +		Item newItem = (Item)MemberwiseClone();
 +
 +		newItem.ModItem = ModItem?.Clone(newItem);
-+		newItem.globalItems = globalItems
-+			.Select(g => new Instanced<GlobalItem>(g.Index, g.Instance?.Clone(this, newItem)))
-+			.ToArray();
++		newItem._globals = _globals?.Select(g => g?.Clone(this, newItem)).ToArray();
 +
 +		return newItem;
 +	}
@@ -2157,18 +2283,19 @@
  	}
  
 +	/// <summary>
-+	/// Clears the overriden value of <see cref="Name"/>.
++	/// Clears the overridden value of <see cref="Name"/>.
 +	/// </summary>
  	public void ClearNameOverride()
  	{
  		_nameOverride = null;
-@@ -49309,6 +_,9 @@
+@@ -49309,6 +_,10 @@
  		dye = 0;
  		shoot = 0;
  		mountType = -1;
++		active = false;
 +
 +		ModItem = null;
-+		globalItems = new Instanced<GlobalItem>[0];
++		_globals = null;
  	}
  
  	public void OnPurchase(Item item)
@@ -2193,7 +2320,15 @@
  			TurnToAir();
  	}
  
-@@ -49359,6 +_,7 @@
+@@ -49356,9 +_,15 @@
+ 		}
+ 	}
+ 
++	/// <summary>
++	/// Resets the stats of this item while preserving modded data, prefix, stack, and favorited. Used to update the stats of this item to facilitate <see cref="ItemVariants"/>. This is called on most items when a player enters a world to ensure that their stats match the variant expected for the world seed.
++	/// <para/> If <paramref name="onlyIfVariantChanged"/> is true (it usually is), then the item is only refreshed if <see cref="Item.Variant"/> and <see cref="ItemVariants.SelectVariant(int)"/> differ.
++	/// </summary>
++	/// <param name="onlyIfVariantChanged"></param>
  	public void Refresh(bool onlyIfVariantChanged = true)
  	{
  		if (!IsAir && (!onlyIfVariantChanged || ItemVariants.SelectVariant(type) != Variant)) {

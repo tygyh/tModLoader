@@ -148,7 +148,7 @@ public sealed record Condition(LocalizedText Description, Func<bool> Predicate)
 	public static readonly Condition DownedOldOnesArmyT2 =		new("Conditions.DownedOldOnesArmyT2",		() => GameContent.Events.DD2Event.DownedInvasionT2);
 	public static readonly Condition DownedOldOnesArmyT3 =		new("Conditions.DownedOldOnesArmyT3",		() => GameContent.Events.DD2Event.DownedInvasionT3);
 
-	public static readonly Condition NotDownedKingSlime =	  	new("Conditions.NotNotDownedKingSlime",		() => !NPC.downedSlimeKing);
+	public static readonly Condition NotDownedKingSlime =	  	new("Conditions.NotDownedKingSlime",		() => !NPC.downedSlimeKing);
 	public static readonly Condition NotDownedEyeOfCthulhu =	new("Conditions.NotDownedEyeOfCthulhu",		() => !NPC.downedBoss1);
 	public static readonly Condition NotDownedEowOrBoc =	  	new("Conditions.NotDownedBoss2",		 	() => !NPC.downedBoss2);
 	public static readonly Condition NotDownedEaterOfWorlds =	new("Conditions.NotDownedEaterOfWorlds", 	() => !NPC.downedBoss2 && !WorldGen.crimson);
@@ -226,5 +226,11 @@ public sealed record Condition(LocalizedText Description, Func<bool> Predicate)
 	public static Condition GolfScoreOver(int score) => new(Language.GetText("Conditions.GolfScoreOver").WithFormatArgs(score), () => Main.LocalPlayer.golferScoreAccumulated >= score);
 	public static Condition NpcIsPresent(int npcId) => new(Language.GetText("Conditions.NpcIsPresent").WithFormatArgs(Lang.GetNPCName(npcId)), () => NPC.AnyNPCs(npcId));
 	public static Condition AnglerQuestsFinishedOver(int quests) => new(Language.GetText("Conditions.AnglerQuestsFinishedOver").WithFormatArgs(quests), () => Main.LocalPlayer.anglerQuestsFinished >= quests);
+	public static Condition BestiaryFilledPercent(int percent) {
+		if (percent >= 100)
+			return new Condition("Conditions.BestiaryFull", () => Main.GetBestiaryProgressReport().CompletionPercent >= 1f);
+
+		return new(Language.GetText("Conditions.BestiaryPercentage").WithFormatArgs(percent), () => Main.GetBestiaryProgressReport().CompletionPercent >= percent / 100f);
+	}
 }
 			

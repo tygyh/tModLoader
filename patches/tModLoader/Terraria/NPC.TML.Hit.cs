@@ -104,6 +104,12 @@ public partial class NPC
 		public StatModifier CritDamage = new(2f, 1f);
 
 		/// <summary>
+		/// Applied to damage after defense and before <see cref="FinalDamage"/> when the hit is _not_ a crit. <br/>
+		/// Effectively a compliment for <see cref="CritDamage"/>
+		/// </summary>
+		public StatModifier NonCritDamage = new();
+
+		/// <summary>
 		/// Applied to the final damage result. <br/>
 		/// Used by <see cref="NPC.takenDamageMultiplier"/> to make enemies extra susceptible/resistant to damage. <br/>
 		/// <br/>
@@ -141,6 +147,13 @@ public partial class NPC
 		/// Sets the hit to be a crit. Does nothing if <see cref="DisableCrit"/> has been called
 		/// </summary>
 		public void SetCrit() => _critOverride ??= true;
+
+		private bool _knockbackDisabled = false;
+
+		/// <summary>
+		/// Sets the hit to have no knockback, regardless of <see cref="Knockback"/> values. Set automatically for NPC with <see cref="NPC.knockBackResist"/> values of 0 for consistency.
+		/// </summary>
+		public void DisableKnockback() => _knockbackDisabled = true;
 
 		/// <summary>
 		/// Used by <see cref="NPC.onFire2"/> buff (additive) and <see cref="NPC.knockBackResist"/> (multiplicative) <br/>
@@ -188,9 +201,10 @@ public partial class NPC
 
 		public readonly int GetDamage(float baseDamage, bool crit, bool damageVariation = false, float luck = 0f)
 		{
+			crit = _critOverride ?? crit;
 			if (SuperArmor) {
 				float dmg = 1;
-				if (_critOverride ?? crit)
+				if (crit)
 					dmg *= CritDamage.Additive * CritDamage.Multiplicative;
 
 				return Math.Clamp((int)dmg, 1, Math.Min(_damageLimit, 4));
@@ -204,20 +218,19 @@ public partial class NPC
 			if (damageVariation && variationPercent > 0)
 				damage = Main.DamageVar(damage, variationPercent, luck);
 
-			float defense = Defense.ApplyTo(0);
+			float defense = Math.Max(Defense.ApplyTo(0), 0);
 			float armorPenetration = defense * Math.Clamp(ScalingArmorPenetration.Value, 0, 1) + ArmorPenetration.Value;
 			defense = Math.Max(defense - armorPenetration, 0);
 
 			float damageReduction = defense * DefenseEffectiveness.Value;
 			damage = Math.Max(damage - damageReduction, 1);
 
-			if (_critOverride ?? crit)
-				damage = CritDamage.ApplyTo(damage);
+			damage = (crit ? CritDamage : NonCritDamage).ApplyTo(damage);
 
 			return Math.Clamp((int)FinalDamage.ApplyTo(damage), 1, _damageLimit);
 		}
 
-		public readonly float GetKnockback(float baseKnockback) => Math.Max(Knockback.ApplyTo(baseKnockback), 0);
+		public readonly float GetKnockback(float baseKnockback) => _knockbackDisabled ? 0 : Math.Max(Knockback.ApplyTo(baseKnockback), 0);
 
 		public HitInfo ToHitInfo(float baseDamage, bool crit, float baseKnockback, bool damageVariation = false, float luck = 0f)
 		{
@@ -257,7 +270,7 @@ public partial class NPC
 		/// <br/>
 		/// Using this instead of <see cref="Damage"/> can prevent diminishing returns from NPC defense, double crits, or excessively strong effects if the NPC has a vulnerability to the weapon/projectile (like vampires and stakes).
 		/// <br/>
-		/// Used by vanilla for dryad ward retaliation, and many sword on-hit projectiles like volcano and beekeepr
+		/// Used by vanilla for dryad ward retaliation, and many sword on-hit projectiles like volcano and beekeeper
 		/// </summary>
 		public int SourceDamage {
 			readonly get => _sourceDamage;

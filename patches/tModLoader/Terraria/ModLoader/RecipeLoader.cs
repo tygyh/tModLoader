@@ -10,7 +10,7 @@ using Terraria.DataStructures;
 namespace Terraria.ModLoader;
 
 /// <summary>
-/// This is where all Recipe and GlobalRecipe hooks are gathered and called.
+/// This is where all Recipe hooks are gathered and called.
 /// </summary>
 public static class RecipeLoader
 {
@@ -127,7 +127,8 @@ public static class RecipeLoader
 
 		// define sort function
 		int i = 0;
-		void Sort(Recipe r) {
+		void Sort(Recipe r)
+		{
 			if (sortBefore.TryGetValue(r, out var before))
 				foreach (var c in before)
 					Sort(c);
@@ -170,7 +171,7 @@ public static class RecipeLoader
 	}
 
 	/// <summary>
-	/// recipe.OnCraftHooks followed by Calls ItemLoader.OnCreate with a RecipeCreationContext
+	/// recipe.OnCraftHooks followed by Calls ItemLoader.OnCreate with a RecipeItemCreationContext
 	/// </summary>
 	/// <param name="item">The item crafted.</param>
 	/// <param name="recipe">The recipe used to craft the item.</param>

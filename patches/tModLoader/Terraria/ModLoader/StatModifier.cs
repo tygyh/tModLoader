@@ -95,10 +95,11 @@ public struct StatModifier
 		=> m1.Additive != m2.Additive || m1.Multiplicative != m2.Multiplicative || m1.Flat != m2.Flat || m1.Base != m2.Base;
 
 	/// <summary>
-	/// Use this to apply the modifers of this <see cref="StatModifier"/> to the <paramref name="baseValue"/>. You should assign
+	/// Use this to apply the modifiers of this <see cref="StatModifier"/> to the <paramref name="baseValue"/>. You should assign
 	/// the value passed in to the return result. For example:
 	/// <para><br><c>damage = CritDamage.ApplyTo(damage)</c></br></para>
-	/// <br></br>could be used to apply a crit damage modifier to a base damage value 
+	/// <br></br>could be used to apply a crit damage modifier to a base damage value
+	/// <para/> Note that when using this to calculate the final damage of a <see cref="DamageClass"/> make sure to use <see cref="Player.GetTotalDamage(DamageClass)"/> not <see cref="Player.GetDamage(DamageClass)"/> to account for inherited damage modifiers such as Generic damage.
 	/// </summary>
 	/// <remarks>For help understanding the meanings of the applied values please make note of documentation for:
 	/// <list type="bullet">
@@ -115,14 +116,20 @@ public struct StatModifier
 	/// <item><description>Finally, <see cref="Flat"/> as added to the result of all previous calculations</description></item>
 	/// </list>
 	/// </remarks>
-	/// <param name="baseValue">The starting value to apply modifers to</param>
+	/// <param name="baseValue">The starting value to apply modifiers to</param>
 	/// <returns>The result of <paramref name="baseValue"/> after all modifiers are applied</returns>
 	public float ApplyTo(float baseValue) =>
 		(baseValue + Base) * Additive * Multiplicative + Flat;
 
+	/// <summary>
+	/// Combines the components of two StatModifiers. Typically used to apply the effects of ammo-specific StatModifier to the DamageClass StatModifier values.
+	/// </summary>
 	public StatModifier CombineWith(StatModifier m)
 		=> new StatModifier(Additive + m.Additive - 1, Multiplicative * m.Multiplicative, Flat + m.Flat, Base + m.Base);
 
+	/// <summary>
+	/// Scales all components of this StatModifier for the purposes of applying damage class modifier inheritance.<para/>This is <b>NOT</b> intended for typical modding usage, if you are looking to increase this stat by some percentage, use the addition (<c>+</c>) operator.
+	/// </summary>
 	public StatModifier Scale(float scale)
 		=> new StatModifier(1 + (Additive - 1) * scale, 1 + (Multiplicative - 1) * scale, Flat * scale, Base * scale);
 }

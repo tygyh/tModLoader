@@ -9,8 +9,13 @@ namespace ExampleMod.Content.Biomes
 {
 	public class ExampleWaterStyle : ModWaterStyle
 	{
+		private Asset<Texture2D> rainTexture;
+		public override void Load() {
+			rainTexture = Mod.Assets.Request<Texture2D>("Content/Biomes/ExampleRain");
+		}
+
 		public override int ChooseWaterfallStyle() {
-			return ModContent.Find<ModWaterfallStyle>("ExampleMod/ExampleWaterfallStyle").Slot;
+			return ModContent.GetInstance<ExampleWaterfallStyle>().Slot;
 		}
 
 		public override int GetSplashDust() {
@@ -18,7 +23,7 @@ namespace ExampleMod.Content.Biomes
 		}
 
 		public override int GetDropletGore() {
-			return ModContent.Find<ModGore>("ExampleMod/MinionBossBody_Back").Type;
+			return ModContent.GoreType<ExampleDroplet>();
 		}
 
 		public override void LightColorMultiplier(ref float r, ref float g, ref float b) {
@@ -35,8 +40,6 @@ namespace ExampleMod.Content.Biomes
 			return (byte)Main.rand.Next(3);
 		}
 
-		public override Asset<Texture2D> GetRainTexture() {
-			return ModContent.Request<Texture2D>("ExampleMod/Content/Biomes/ExampleRain");
-		}
+		public override Asset<Texture2D> GetRainTexture() => rainTexture;
 	}
 }

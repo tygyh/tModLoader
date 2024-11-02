@@ -1,3 +1,6 @@
+using Terraria.GameContent.Drawing;
+using Terraria.ModLoader;
+
 namespace Terraria.ID;
 
 partial class TileID
@@ -16,24 +19,64 @@ partial class TileID
 		/// <summary> Allows non-solid tiles to be sloped (solid tiles can always be sloped, regardless of this set). </summary>
 		public static bool[] CanBeSloped = Factory.CreateBoolSet();
 
+		/// <summary>Used in <see cref="FallingBlockProjectile"/>.</summary>
+		public class FallingBlockProjectileInfo
+		{
+			public FallingBlockProjectileInfo(int FallingProjectileType, int FallingProjectileDamage = 10)
+			{
+				this.FallingProjectileType = FallingProjectileType;
+				this.FallingProjectileDamage = FallingProjectileDamage;
+			}
+
+			public int FallingProjectileType { get; set; }
+			public int FallingProjectileDamage { get; set; }
+		}
+		/// <summary>
+		/// Maps tile type for <see cref="Falling"/> tiles to their corresponding falling block projectile and associated falling projectile damage. Falling coins use 0 damage while all other tiles use 10 damage.
+		/// </summary>
+		public static FallingBlockProjectileInfo[] FallingBlockProjectile = Factory.CreateCustomSet<FallingBlockProjectileInfo>(null,
+			Sand, new FallingBlockProjectileInfo(ProjectileID.SandBallFalling),
+			Ebonsand, new FallingBlockProjectileInfo(ProjectileID.EbonsandBallFalling),
+			TileID.Mud, new FallingBlockProjectileInfo(ProjectileID.MudBall),
+			Pearlsand, new FallingBlockProjectileInfo(ProjectileID.PearlSandBallFalling),
+			Silt, new FallingBlockProjectileInfo(ProjectileID.SiltBall),
+			Slush, new FallingBlockProjectileInfo(ProjectileID.SlushBall),
+			Crimsand, new FallingBlockProjectileInfo(ProjectileID.CrimsandBallFalling),
+			CopperCoinPile, new FallingBlockProjectileInfo(ProjectileID.CopperCoinsFalling, 0),
+			SilverCoinPile, new FallingBlockProjectileInfo(ProjectileID.SilverCoinsFalling, 0),
+			GoldCoinPile, new FallingBlockProjectileInfo(ProjectileID.GoldCoinsFalling, 0),
+			PlatinumCoinPile, new FallingBlockProjectileInfo(ProjectileID.PlatinumCoinsFalling, 0),
+			ShellPile, new FallingBlockProjectileInfo(ProjectileID.ShellPileFalling)
+		);
+
 		/// <summary>
 		/// Whether or not the tile will be ignored for automatic step up regarding town NPC collision.
 		/// <br>Only checked when <see cref="Collision.StepUp"/> with specialChecksMode set to 1 is called</br>
 		/// </summary>
 		public static bool[] IgnoredByNpcStepUp = Factory.CreateBoolSet(14, 16, 18, 134, 469);
 
-		/// <summary> Whether or not the smart cursor function is disabled when the cursor hovers above this tile. </summary>
+		/// <summary>
+		/// Whether or not the smart cursor function is disabled when the cursor hovers above this tile. Used by tiles frequently right click interacted with to help prevent accidental tile placement when the player accidentally left clicks on it with smart cursor enabled, such as doors and containers. 
+		/// <para/> Defaults to <see langword="false"/>.
+		/// </summary>
 		// Maybe this should be a hook instead?
 		public static bool[] DisableSmartCursor = Factory.CreateBoolSet(4, 10, 11, 13, 21, 29, 33, 49, 50, 55, 79, 85, 88, 97, 104, 125, 132, 136, 139, 144, 174, 207, 209, 212, 216, 219, 237, 287, 334, 335, 338, 354, 386, 387, 388, 389, 411, 425, 441, 463, 467, 468, 491, 494, 510, 511, 573, 621, 642);
 
-		/// <summary> Whether or not the smart tile interaction function is disabled when the cursor hovers above this tile. </summary>
+		/// <summary>
+		/// Whether or not the smart tile interaction function is disabled when the cursor hovers above this tile. Used by tiles interactable by right click that do not use smart interact, such as torches and candles.
+		/// <para/> Defaults to <see langword="false"/>.
+		/// </summary>
 		public static bool[] DisableSmartInteract = Factory.CreateBoolSet(4, 33, 334, 395, 410, 455, 471, 480, 509, 520, 657, 658);
 
 		/// <summary> Whether or not this tile is a valid spawn point. </summary>
 		public static bool[] IsValidSpawnPoint = Factory.CreateBoolSet(Beds);
 
-		/// <summary> Whether or not this tile behaves like a torch. If you are making a torch tile, then setting this to true is necessary in order for tile placement, tile framing, and the item's smart selection to work properly. </summary>
+		/// <summary> Whether or not this tile behaves like a torch. If you are making a torch tile, then setting this to true is necessary in order for tile placement, tile framing, and the item's smart selection to work properly. Each item that places torch tiles should also set <see cref="ItemID.Sets.Torches"/>.</summary>
 		public static bool[] Torch = Factory.CreateBoolSet(TileID.Torches);
+
+		/// <summary> Whether or not this tile behaves like a campfire. Campfires must be 3x2 and need to follow the vanilla layout with the on state being at the top of the texture. Padding must also be present in the same manner, resulting in a 54x36 section for each style. The animation, however, can be done with a separate flame texture if desired. <br/>
+		/// Necessary for block swap and Marshmallow on a Stick features.</summary>
+		public static bool[] Campfire = Factory.CreateBoolSet(TileID.Campfire);
 
 		/// <summary> Whether or not this tile is a clock. </summary>
 		public static bool[] Clock = Factory.CreateBoolSet(GrandfatherClocks);
@@ -77,7 +120,7 @@ partial class TileID
 		};
 
 		/// <summary>
-		/// Tiles that are interpreted as a wall by nearby walls during framing, causing them to frame as if merging with this adjacent tile. Prevents wall from drawing within bounds for transparant tiles.
+		/// Tiles that are interpreted as a wall by nearby walls during framing, causing them to frame as if merging with this adjacent tile. Prevents wall from drawing within bounds for transparent tiles.
 		/// </summary>
 		public static bool[] WallsMergeWith = Factory.CreateBoolSet(Glass);
 
@@ -86,6 +129,13 @@ partial class TileID
 		/// The value a tile forces to be set for <see cref="BlockMergesWithMergeAllBlock"/> regardless of default conditions (see its documentation). null by default.
 		/// </summary>
 		public static bool?[] BlockMergesWithMergeAllBlockOverride = Factory.CreateCustomSet<bool?>(null, 10, false, 387, false, 541, false);
+
+		// Values taken from Player.PlaceThing_Tiles_BlockPlacementForAssortedThings()
+		/// <summary>
+		/// Allows tiles to be placed next to any tile or wall. (Tiles normally need a <see cref="Main.tileSolid"/> tile, <see cref="Rope"/> tile, <see cref="IsBeam"/> tile, or a wall adjacent to the target position to be placeable.)
+		/// <br>Used by: Cobweb, Coin Piles, Living Fire Blocks, Smoke Blocks, Bubble Blocks</br>
+		/// </summary>
+		public static bool[] CanPlaceNextToNonSolidTile = Factory.CreateBoolSet(false, Cobweb, CopperCoinPile, SilverCoinPile, GoldCoinPile, PlatinumCoinPile, LivingFire, LivingCursedFire, LivingDemonFire, LivingFrostFire, LivingIchor, LivingUltrabrightFire, ChimneySmoke, Bubble);
 
 		/// New created sets to facilitate vanilla biome block counting including modded blocks. To replace the current hardcoded counts in SceneMetrics.cs
 		public static int[] CorruptBiome = Factory.CreateIntSet(0, 23, 1, 24, 1, 25, 1, 32, 1, 112, 1, 163, 1, 400, 1, 398, 1, 27, -10);
@@ -102,14 +152,21 @@ partial class TileID
 		public static int[] RemixCorruptBiome = Factory.CreateIntSet(0, 23, 1, 24, 1, 25, 1, 32, 1, 112, 1, 163, 1, 400, 1, 398, 1, 27, -10, 474, 1);
 
 		/// <summary>
-		/// The ID of the tile that a given door transforms into when it is CLOSED. Defaults to -1, which means said tile isn't a door.
+		/// The ID of the tile that a given closed door transforms into when it becomes OPENED. Defaults to -1, which means said tile isn't a closed door.
 		/// </summary>
 		public static int[] OpenDoorID = Factory.CreateIntSet(-1);
 
 		/// <summary>
-		/// The ID of the tile that a given door transforms into when it is OPEN. Defaults to -1, which means said tile isn't a door.
+		/// The ID of the tile that a given open door transforms into when it becomes CLOSED. Defaults to -1, which means said tile isn't an open door.
 		/// </summary>
 		public static int[] CloseDoorID = Factory.CreateIntSet(-1);
+
+		/// <summary>
+		/// A version of <see cref="TileID.Sets.SwaysInWindBasic"/> that functions with multitiles. Causes the tile to sway along with the wind and player interaction.
+		/// <para/> <b>NOTE:</b> Requires calling <see cref="TileDrawing.AddSpecialPoint"/> in <c>ModTile.PreDraw</c> for the coordinates of the top left tile of the multitile. Use either
+		/// <see cref="TileDrawing.TileCounterType.MultiTileVine"/> or <see cref="TileDrawing.TileCounterType.MultiTileGrass"/>, depending on what kind of sway interaction you want.
+		/// </summary>
+		public static bool[] MultiTileSway = Factory.CreateBoolSet(false);
 
 		/// Functions to simplify modders adding a tile to the crimson, corruption, or jungle regardless of a remix world or not. Can still add manually as needed.
 		public static void AddCrimsonTile(ushort type, int strength = 1)

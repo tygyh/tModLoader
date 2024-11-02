@@ -10,7 +10,7 @@ using Terraria.ID;
 using Terraria.Localization;
 using Terraria.ModLoader.Core;
 using Terraria.ModLoader.IO;
-using HookList = Terraria.ModLoader.Core.HookList<Terraria.ModLoader.GlobalProjectile>;
+using HookList = Terraria.ModLoader.Core.GlobalHookList<Terraria.ModLoader.GlobalProjectile>;
 
 namespace Terraria.ModLoader;
 
@@ -22,8 +22,6 @@ public static class ProjectileLoader
 {
 	public static int ProjectileCount { get; private set; } = ProjectileID.Count;
 	private static readonly IList<ModProjectile> projectiles = new List<ModProjectile>();
-
-	internal static readonly List<GlobalProjectile> globalProjectiles = new();
 
 	private static readonly List<HookList> hooks = new();
 	private static readonly List<HookList> modHooks = new();
@@ -37,7 +35,6 @@ public static class ProjectileLoader
 
 	public static T AddModHook<T>(T hook) where T : HookList
 	{
-		hook.Update(globalProjectiles);
 		modHooks.Add(hook);
 		return hook;
 	}
@@ -58,8 +55,11 @@ public static class ProjectileLoader
 		return type >= ProjectileID.Count && type < ProjectileCount ? projectiles[type - ProjectileID.Count] : null;
 	}
 
-	internal static void ResizeArrays()
+	internal static void ResizeArrays(bool unloading)
 	{
+		if (!unloading)
+			GlobalList<GlobalProjectile>.FinishLoading(ProjectileCount);
+
 		//Textures
 		Array.Resize(ref TextureAssets.Projectile, ProjectileCount);
 
@@ -83,16 +83,23 @@ public static class ProjectileLoader
 		for (int i = 0; i < ProjectileCount; i++) {
 			Projectile.perIDStaticNPCImmunity[i] = new uint[200];
 		}
-
-		foreach (var hook in hooks.Union(modHooks)) {
-			hook.Update(globalProjectiles);
-		}
 	}
 
 	internal static void FinishSetup()
 	{
+		GlobalLoaderUtils<GlobalProjectile, Projectile>.BuildTypeLookups(new Projectile().SetDefaults);
+		UpdateHookLists();
+		GlobalTypeLookups<GlobalProjectile>.LogStats();
+
 		foreach (ModProjectile proj in projectiles) {
 			Lang._projectileNameCache[proj.Type] = proj.DisplayName;
+		}
+	}
+
+	private static void UpdateHookLists()
+	{
+		foreach (var hook in hooks.Union(modHooks)) {
+			hook.Update();
 		}
 	}
 
@@ -100,8 +107,9 @@ public static class ProjectileLoader
 	{
 		ProjectileCount = ProjectileID.Count;
 		projectiles.Clear();
-		globalProjectiles.Clear();
+		GlobalList<GlobalProjectile>.Reset();
 		modHooks.Clear();
+		UpdateHookLists();
 	}
 
 	internal static bool IsModProjectile(Projectile projectile)
@@ -109,21 +117,13 @@ public static class ProjectileLoader
 		return projectile.type >= ProjectileID.Count;
 	}
 
-	private static HookList HookSetDefaults = AddHook<Action<Projectile>>(g => g.SetDefaults);
-
 	internal static void SetDefaults(Projectile projectile, bool createModProjectile = true)
 	{
 		if (IsModProjectile(projectile) && createModProjectile) {
 			projectile.ModProjectile = GetProjectile(projectile.type).NewInstance(projectile);
 		}
 
-		LoaderUtils.InstantiateGlobals(projectile, globalProjectiles, ref projectile.globalProjectiles, () => {
-			projectile.ModProjectile?.SetDefaults();
-		});
-
-		foreach (var g in HookSetDefaults.Enumerate(projectile)) {
-			g.SetDefaults(projectile);
-		}
+		GlobalLoaderUtils<GlobalProjectile, Projectile>.SetDefaults(projectile, ref projectile._globals, static e => e.ModProjectile?.SetDefaults());
 	}
 
 	private static HookList HookOnSpawn = AddHook<Action<Projectile, IEntitySource>>(g => g.OnSpawn);
@@ -136,7 +136,7 @@ public static class ProjectileLoader
 			g.OnSpawn(projectile, source);
 		}
 	}
-	
+
 	//in Terraria.Projectile rename AI to VanillaAI then make AI call ProjectileLoader.ProjectileAI(this)
 	public static void ProjectileAI(Projectile projectile)
 	{
@@ -236,7 +236,7 @@ public static class ProjectileLoader
 
 	public static void ReceiveExtraAI(Projectile projectile, byte[] extraAI)
 	{
-		using var stream = new MemoryStream(extraAI);
+		using var stream = extraAI.ToMemoryStream();
 		using var modReader = new BinaryReader(stream);
 
 		projectile.ModProjectile?.ReceiveExtraAI(modReader);
@@ -364,14 +364,28 @@ public static class ProjectileLoader
 		return result;
 	}
 
+	[Obsolete]
 	private static HookList HookKill = AddHook<Action<Projectile, int>>(g => g.Kill);
 
-	public static void Kill(Projectile projectile, int timeLeft)
+	[Obsolete("Renamed to OnKill")]
+	public static void Kill_Obsolete(Projectile projectile, int timeLeft)
 	{
 		projectile.ModProjectile?.Kill(timeLeft);
 
 		foreach (var g in HookKill.Enumerate(projectile)) {
 			g.Kill(projectile, timeLeft);
+		}
+	}
+
+	private static HookList HookOnKill = AddHook<Action<Projectile, int>>(g => g.OnKill);
+
+	public static void OnKill(Projectile projectile, int timeLeft)
+	{
+		projectile.ModProjectile?.OnKill(timeLeft);
+		Kill_Obsolete(projectile, timeLeft); // Placed here so both ModProjectile methods are called and then the GlobalProjectile methods
+
+		foreach (var g in HookOnKill.Enumerate(projectile)) {
+			g.OnKill(projectile, timeLeft);
 		}
 	}
 
@@ -558,6 +572,7 @@ public static class ProjectileLoader
 		}
 	}
 
+	[Obsolete($"Moved to ItemLoader. Fishing line position and color are now set by the pole used.")]
 	public static void ModifyFishingLine(Projectile projectile, ref float polePosX, ref float polePosY, ref Color lineColor)
 	{
 		if (projectile.ModProjectile == null)
@@ -569,8 +584,6 @@ public static class ProjectileLoader
 		projectile.ModProjectile?.ModifyFishingLine(ref lineOriginOffset, ref lineColor);
 
 		polePosX += lineOriginOffset.X * player.direction;
-		if (player.direction < 0)
-			polePosX -= 13f;
 		polePosY += lineOriginOffset.Y * player.gravDir;
 	}
 
@@ -650,7 +663,7 @@ public static class ProjectileLoader
 	{
 		bool? flag = GetProjectile(type)?.CanUseGrapple(player);
 
-		foreach (var g in HookCanUseGrapple.Enumerate()) {
+		foreach (var g in HookCanUseGrapple.Enumerate(type)) {
 			bool? canGrapple = g.CanUseGrapple(type, player);
 
 			if (canGrapple.HasValue) {
@@ -754,6 +767,27 @@ public static class ProjectileLoader
 
 		foreach (var g in HookDrawBehind.Enumerate(projectile)) {
 			g.DrawBehind(projectile, index, behindNPCsAndTiles, behindNPCs, behindProjectiles, overPlayers, overWiresUI);
+		}
+	}
+
+	private static HookList HookPrepareBombToBlow = AddHook<Action<Projectile>>(g => g.PrepareBombToBlow);
+
+	internal static void PrepareBombToBlow(Projectile projectile)
+	{
+		projectile.ModProjectile?.PrepareBombToBlow();
+
+		foreach (var g in HookPrepareBombToBlow.Enumerate(projectile)) {
+			g.PrepareBombToBlow(projectile);
+		}
+	}
+
+	private static HookList HookEmitEnchantmentVisualsAt = AddHook<Action<Projectile, Vector2, int, int>>(g => g.EmitEnchantmentVisualsAt);
+
+	internal static void EmitEnchantmentVisualsAt(Projectile projectile, Vector2 boxPosition, int boxWidth, int boxHeight) {
+		projectile.ModProjectile?.EmitEnchantmentVisualsAt(boxPosition, boxWidth, boxHeight);
+
+		foreach (var g in HookEmitEnchantmentVisualsAt.Enumerate(projectile)) {
+			g.EmitEnchantmentVisualsAt(projectile, boxPosition, boxWidth, boxHeight);
 		}
 	}
 }

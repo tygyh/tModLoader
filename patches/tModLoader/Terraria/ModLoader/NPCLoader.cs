@@ -14,8 +14,9 @@ using Terraria.ID;
 using Terraria.Localization;
 using Terraria.ModLoader.Core;
 using Terraria.ModLoader.Utilities;
-using HookList = Terraria.ModLoader.Core.HookList<Terraria.ModLoader.GlobalNPC>;
+using HookList = Terraria.ModLoader.Core.GlobalHookList<Terraria.ModLoader.GlobalNPC>;
 using Terraria.ModLoader.IO;
+using Terraria.GameContent.Personalities;
 
 namespace Terraria.ModLoader;
 
@@ -27,8 +28,6 @@ public static class NPCLoader
 {
 	public static int NPCCount { get; private set; } = NPCID.Count;
 	internal static readonly IList<ModNPC> npcs = new List<ModNPC>();
-
-	internal static readonly List<GlobalNPC> globalNPCs = new();
 	internal static readonly IDictionary<int, int> bannerToItem = new Dictionary<int, int>();
 	/// <summary>
 	/// Allows you to stop an NPC from dropping loot by adding item IDs to this list. This list will be cleared whenever NPCLoot ends. Useful for either removing an item or change the drop rate of an item in the NPC's loot table. To change the drop rate of an item, use the PreNPCLoot hook, spawn the item yourself, then add the item's ID to this list.
@@ -47,7 +46,6 @@ public static class NPCLoader
 
 	public static T AddModHook<T>(T hook) where T : HookList
 	{
-		hook.Update(globalNPCs);
 		modHooks.Add(hook);
 		return hook;
 	}
@@ -62,7 +60,7 @@ public static class NPCLoader
 	/// Gets the ModNPC template instance corresponding to the specified type (not the clone/new instance which gets added to NPCs as the game is played).
 	/// </summary>
 	/// <param name="type">The type of the npc</param>
-	/// <returns>The ModNPC instance in the npcs array, null if not found.</returns>
+	/// <returns>The ModNPC instance in the <see cref="npcs"/> array, null if not found.</returns>
 	public static ModNPC GetNPC(int type)
 	{
 		return type >= NPCID.Count && type < NPCCount ? npcs[type - NPCID.Count] : null;
@@ -70,6 +68,9 @@ public static class NPCLoader
 
 	internal static void ResizeArrays(bool unloading)
 	{
+		if (!unloading)
+			GlobalList<GlobalNPC>.FinishLoading(NPCCount);
+
 		// Textures
 		Array.Resize(ref TextureAssets.Npc, NPCCount);
 
@@ -99,16 +100,73 @@ public static class NPCLoader
 			Main.npcFrameCount[k] = 1;
 			Lang._npcNameCache[k] = LocalizedText.Empty;
 		}
-
-		foreach (var hook in hooks.Union(modHooks)) {
-			hook.Update(globalNPCs);
-		}
 	}
 
 	internal static void FinishSetup()
 	{
+		var temp = new NPC();
+		GlobalLoaderUtils<GlobalNPC, NPC>.BuildTypeLookups(type => temp.SetDefaults(type));
+		UpdateHookLists();
+		GlobalTypeLookups<GlobalNPC>.LogStats();
+
 		foreach (ModNPC npc in npcs) {
 			Lang._npcNameCache[npc.Type] = npc.DisplayName;
+			RegisterTownNPCMoodLocalizations(npc);
+		}
+	}
+
+	private static void UpdateHookLists()
+	{
+		foreach (var hook in hooks.Union(modHooks)) {
+			hook.Update();
+		}
+	}
+
+	internal static void RegisterTownNPCMoodLocalizations(ModNPC npc)
+	{
+		if (npc.NPC.townNPC && !NPCID.Sets.IsTownPet[npc.NPC.type] && !NPCID.Sets.NoTownNPCHappiness[npc.NPC.type]) {
+			string prefix = npc.GetLocalizationKey("TownNPCMood");
+			List<string> keys = new List<string> {
+				"Content", "NoHome", "FarFromHome", "LoveSpace", "DislikeCrowded", "HateCrowded"
+			};
+
+			if (Main.ShopHelper._database.TryGetProfileByNPCID(npc.NPC.type, out var personalityProfile)) {
+				var shopModifiers = personalityProfile.ShopModifiers;
+
+				var biomePreferenceList = (BiomePreferenceListTrait)shopModifiers.SingleOrDefault(t => t is BiomePreferenceListTrait);
+				if (biomePreferenceList != null) {
+					if(biomePreferenceList.Preferences.Any(x => x.Affection == AffectionLevel.Love))
+						keys.Add("LoveBiome");
+					if(biomePreferenceList.Preferences.Any(x => x.Affection == AffectionLevel.Like))
+						keys.Add("LikeBiome");
+					if(biomePreferenceList.Preferences.Any(x => x.Affection == AffectionLevel.Dislike))
+						keys.Add("DislikeBiome");
+					if(biomePreferenceList.Preferences.Any(x => x.Affection == AffectionLevel.Hate))
+						keys.Add("HateBiome");
+				}
+
+				if(shopModifiers.Any(t => t is NPCPreferenceTrait { Level: AffectionLevel.Love }))
+					keys.Add("LoveNPC");
+				if (shopModifiers.Any(t => t is NPCPreferenceTrait { Level: AffectionLevel.Like }))
+					keys.Add("LikeNPC");
+				if (shopModifiers.Any(t => t is NPCPreferenceTrait { Level: AffectionLevel.Dislike }))
+					keys.Add("DislikeNPC");
+				if (shopModifiers.Any(t => t is NPCPreferenceTrait { Level: AffectionLevel.Hate }))
+					keys.Add("HateNPC");
+			}
+
+			keys.Add("LikeNPC_Princess"); // Added here because it makes sense to order this at end.
+			keys.Add("Princess_LovesNPC");
+
+			foreach (var key in keys) {
+				string oldKey = npc.Mod.GetLocalizationKey($"TownNPCMood.{npc.Name}.{key}");
+				if (key == "Princess_LovesNPC")
+					oldKey = $"TownNPCMood_Princess.LoveNPC_{npc.FullName}";
+				string fullKey = $"{prefix}.{key}";
+				string defaultValueKey = "TownNPCMood." + key;
+				// Register current language translation rather than vanilla text substitution so modder can see the {BiomeName} and {NPCName} usages. Might result in non-English values, but modder is expected to change the translation value anyway.
+				Language.GetOrRegister(fullKey, () => Language.Exists(oldKey) ? $"{{${oldKey}}}" : Language.GetTextValue(defaultValueKey));
+			}
 		}
 	}
 
@@ -116,17 +174,19 @@ public static class NPCLoader
 	{
 		NPCCount = NPCID.Count;
 		npcs.Clear();
-		globalNPCs.Clear();
+		GlobalList<GlobalNPC>.Reset();
 		bannerToItem.Clear();
 		modHooks.Clear();
+		UpdateHookLists();
+
+		if (!Main.dedServ) // dedicated servers implode with texture swaps and I've never understood why, so here's a fix for that     -thomas
+			TownNPCProfiles.Instance.ResetTexturesAccordingToVanillaProfiles();
 	}
 
 	internal static bool IsModNPC(NPC npc)
 	{
 		return npc.type >= NPCID.Count;
 	}
-
-	private static HookList HookSetDefaults = AddHook<Action<NPC>>(g => g.SetDefaults);
 
 	internal static void SetDefaults(NPC npc, bool createModNPC = true)
 	{
@@ -140,12 +200,14 @@ public static class NPCLoader
 			}
 		}
 
-		LoaderUtils.InstantiateGlobals(npc, globalNPCs, ref npc.globalNPCs, () => {
-			npc.ModNPC?.SetDefaults();
-		});
+		GlobalLoaderUtils<GlobalNPC, NPC>.SetDefaults(npc, ref npc._globals, static n => n.ModNPC?.SetDefaults());
+	}
 
-		foreach (var g in HookSetDefaults.Enumerate(npc)) {
-			g.SetDefaults(npc);
+	private static HookList HookSetVariantDefaults = AddHook<Action<NPC>>(g => g.SetDefaultsFromNetId);
+	internal static void SetDefaultsFromNetId(NPC npc)
+	{
+		foreach (var g in HookSetVariantDefaults.Enumerate(npc)) {
+			g.SetDefaultsFromNetId(npc);
 		}
 	}
 
@@ -175,7 +237,7 @@ public static class NPCLoader
 	private static HookList HookSetBestiary = AddHook<DelegateSetBestiary>(g => g.SetBestiary);
 	public static void SetBestiary(NPC npc, BestiaryDatabase database, BestiaryEntry bestiaryEntry)
 	{
-		if(IsModNPC(npc)) {
+		if (IsModNPC(npc)) {
 			bestiaryEntry.Info.Add(npc.ModNPC.Mod.ModSourceBestiaryInfoElement);
 			foreach (var type in npc.ModNPC.SpawnModBiomes) {
 				bestiaryEntry.Info.Add(LoaderManager.Get<BiomeLoader>().Get(type).ModBiomeBestiaryInfoElement);
@@ -306,7 +368,7 @@ public static class NPCLoader
 
 	public static void ReceiveExtraAI(NPC npc, byte[] extraAI)
 	{
-		using var stream = new MemoryStream(extraAI);
+		using var stream = extraAI.ToMemoryStream();
 		using var modReader = new BinaryReader(stream);
 
 		npc.ModNPC?.ReceiveExtraAI(modReader);
@@ -541,6 +603,24 @@ public static class NPCLoader
 			g.OnCaughtBy(npc, player, item, failed);
 		}
 	}
+		
+	private static HookList HookPickEmote = AddHook<Func<NPC, Player, List<int>, WorldUIAnchor, int?>>(g => g.PickEmote);
+		
+	public static int? PickEmote(NPC npc, Player closestPlayer, List<int> emoteList, WorldUIAnchor anchor) {
+		int? result = null;
+
+		if (npc.ModNPC != null) {
+			result = npc.ModNPC.PickEmote(closestPlayer, emoteList, anchor);
+		}
+
+		foreach (GlobalNPC globalNPC in HookPickEmote.Enumerate(npc)) {
+			int? emote = globalNPC.PickEmote(npc, closestPlayer, emoteList, anchor);
+			if (emote != null)
+				result = emote;
+		}
+
+		return result;
+	}
 
 	private delegate bool DelegateCanHitPlayer(NPC npc, Player target, ref int cooldownSlot);
 	private static HookList HookCanHitPlayer = AddHook<DelegateCanHitPlayer>(g => g.CanHitPlayer);
@@ -582,6 +662,7 @@ public static class NPCLoader
 	}
 
 	private static HookList HookCanHitNPC = AddHook<Func<NPC, NPC, bool>>(g => g.CanHitNPC);
+	private static HookList HookCanBeHitByNPC = AddHook<Func<NPC, NPC, bool>>(g => g.CanBeHitByNPC);
 
 	public static bool CanHitNPC(NPC npc, NPC target)
 	{
@@ -590,7 +671,15 @@ public static class NPCLoader
 				return false;
 		}
 
-		return npc.ModNPC?.CanHitNPC(target) ?? true;
+		foreach (var g in HookCanBeHitByNPC.Enumerate(target)) {
+			if (!g.CanBeHitByNPC(target, npc))
+				return false;
+		}
+
+		if (npc.ModNPC?.CanHitNPC(target) is false)
+			return false;
+
+		return target.ModNPC?.CanBeHitByNPC(npc) ?? true;
 	}
 
 	private delegate void DelegateModifyHitNPC(NPC npc, NPC target, ref NPC.HitModifiers modifiers);
@@ -1060,7 +1149,7 @@ public static class NPCLoader
 			if (g.CanChat(npc) is bool canChat) {
 				if (!canChat)
 					return false;
-				
+
 				ret = true;
 			}
 		}
@@ -1135,7 +1224,8 @@ public static class NPCLoader
 		}
 	}
 
-	public static void AddShops(int type) {
+	public static void AddShops(int type)
+	{
 		GetNPC(type)?.AddShops();
 	}
 
@@ -1144,7 +1234,7 @@ public static class NPCLoader
 
 	public static void ModifyShop(NPCShop shop)
 	{
-		foreach (var g in HookModifyShop.Enumerate()) {
+		foreach (var g in HookModifyShop.Enumerate(shop.NpcType)) {
 			g.ModifyShop(shop);
 		}
 	}
@@ -1155,7 +1245,7 @@ public static class NPCLoader
 	public static void ModifyActiveShop(NPC npc, string shopName, Item[] shopContents)
 	{
 		GetNPC(npc.type)?.ModifyActiveShop(shopName, shopContents);
-		foreach (var g in HookModifyActiveShop.Enumerate()) {
+		foreach (var g in HookModifyActiveShop.Enumerate(npc)) {
 			g.ModifyActiveShop(npc, shopName, shopContents);
 		}
 	}
@@ -1180,7 +1270,7 @@ public static class NPCLoader
 			if (g.CanGoToStatue(npc, toKingStatue) is bool canGo) {
 				if (!canGo)
 					return false;
-				
+
 				ret = true;
 			}
 		}
@@ -1374,4 +1464,40 @@ public static class NPCLoader
 	}
 
 	internal static HookList HookSaveData = AddHook<Action<NPC, TagCompound>>(g => g.SaveData);
+
+	private delegate void DelegateChatBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookChatBubblePosition = AddHook<DelegateChatBubblePosition>(g => g.ChatBubblePosition);
+
+	public static void ChatBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.ChatBubblePosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookChatBubblePosition.Enumerate(npc)) {
+			g.ChatBubblePosition(npc, ref position, ref spriteEffects);
+		}
+	}
+
+	private delegate void DelegatePartyHatPosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookPartyHatPosition = AddHook<DelegatePartyHatPosition>(g => g.PartyHatPosition);
+
+	public static void PartyHatPosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.PartyHatPosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookPartyHatPosition.Enumerate(npc)) {
+			g.PartyHatPosition(npc, ref position, ref spriteEffects);
+		}
+	}
+
+	private delegate void DelegateEmoteBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookEmoteBubblePosition = AddHook<DelegateEmoteBubblePosition>(g => g.EmoteBubblePosition);
+
+	public static void EmoteBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.EmoteBubblePosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookEmoteBubblePosition.Enumerate(npc)) {
+			g.EmoteBubblePosition(npc, ref position, ref spriteEffects);
+		}
+	}
 }

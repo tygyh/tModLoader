@@ -59,7 +59,7 @@
 +		public partial class Sets
  		{
 +			/// <summary>
-+			/// Stores <see cref="Back"/> and <see cref="Front"/> equips to be worm with a specified <see cref="Body"/> equip.
++			/// Stores <see cref="Back"/> and <see cref="Front"/> equips to be worn with a specified <see cref="Body"/> equip.
 +			/// <br/> Used in <see cref="IncludeCapeFrontAndBack"/>.
 +			/// </summary>
  			public struct IncludeCapeFrontAndBackInfo
@@ -67,13 +67,15 @@
 +				/// <summary>
 +				/// The <see cref="Front"/> equip to equip.
 +				/// </summary>
- 				public sbyte frontCape;
-+
+-				public sbyte frontCape;
++				public int frontCape;
+-				public sbyte backCape;
+ 
 +				/// <summary>
 +				/// The <see cref="Back"/> equip to equip.
 +				/// </summary>
- 				public sbyte backCape;
- 
++				public int backCape;
++
 +				/// <summary>
 +				/// If <see langword="true"/>, then this <see cref="IncludeCapeFrontAndBackInfo"/> cannot be used.
 +				/// </summary>

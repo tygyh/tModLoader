@@ -45,8 +45,6 @@ public static class WallLoader
 
 	internal static int ReserveWallID()
 	{
-		if (ModNet.AllowVanillaClients) throw new Exception("Adding walls breaks vanilla client compatibility");
-
 		int reserveID = nextWall;
 		nextWall++;
 		return reserveID;
@@ -199,14 +197,14 @@ public static class WallLoader
 				return false;
 			}
 		}
-		if (wallTypeToItemType.TryGetValue(type, out int value)) {
-			dropType = value;
-		}
 		ModWall modWall = GetWall(type);
-		if (modWall != null && modWall.ItemDrop != 0) {
-			dropType = modWall.ItemDrop;
+		if (modWall != null) {
+			if (wallTypeToItemType.TryGetValue(type, out int value)) {
+				dropType = value;
+			}
+			return modWall.Drop(i, j, ref dropType);
 		}
-		return modWall?.Drop(i, j, ref dropType) ?? true;
+		return true;
 	}
 	//in Terraria.WorldGen.KillWall after if statements setting fail to true call
 	//  WallLoader.KillWall(i, j, tile.wall, ref fail);
@@ -270,7 +268,7 @@ public static class WallLoader
 		ModWall modWall = GetWall(type);
 
 		if (modWall != null) {
-			if(!modWall.WallFrame(i, j, randomizeFrame, ref style, ref frameNumber))
+			if (!modWall.WallFrame(i, j, randomizeFrame, ref style, ref frameNumber))
 				return false;
 		}
 
@@ -333,8 +331,10 @@ public static class WallLoader
 		for (int k = 0; k < ItemLoader.ItemCount; k++) {
 			Item item = ContentSamples.ItemsByType[k];
 			if (!ItemID.Sets.DisableAutomaticPlaceableDrop[k]) {
-				if (item.createWall > -1)
-					WallLoader.wallTypeToItemType[item.createWall] = item.type;
+				if (item.createWall > -1) {
+					// TryAdd won't override existing value if present. Existing ModWall.RegisterItemDrop entries take precedence
+					WallLoader.wallTypeToItemType.TryAdd(item.createWall, item.type);
+				}
 			}
 		}
 	}

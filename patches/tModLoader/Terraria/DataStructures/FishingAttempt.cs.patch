@@ -66,14 +66,14 @@
  	public int waterTilesCount;
 +
 +	/// <summary>
-+	/// The number of liquid tiles needed for proper fishing. If <see cref="waterTilesCount"/> is less than this, then the player will recieve a <see cref="waterQuality"/> percent debuff to their fishing power.
++	/// The number of liquid tiles needed for proper fishing. If <see cref="waterTilesCount"/> is less than this, then the player will receive a <see cref="waterQuality"/> percent debuff to their fishing power.
 +	/// <br/> This debuff is automatically applied to <see cref="fishingLevel"/>.
 +	/// </summary>
  	public int waterNeededToFish;
 +
 +	/// <summary>
 +	/// If positive, the percent decrease in fishing power this attempt has from missing liquid tiles.
-+	/// <br/> This is <strong>not</strong> how gull the body of liquid is.
++	/// <br/> This is <strong>not</strong> how full the body of liquid is.
 +	/// </summary>
  	public float waterQuality;
 +

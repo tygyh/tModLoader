@@ -21,6 +21,10 @@ namespace ExampleMod.Content.Items.Tools
 			// This set is needed to define an item as a tool for catching NPCs at all.
 			// An additional set exists called LavaproofCatchingTool which will allow your item to freely catch the Underworld's lava critters. Use it accordingly.
 			ItemID.Sets.CatchingTool[Item.type] = true;
+
+			// This item does not meet Terraria's automatic criteria to be filtered under the "Tools" filter in Journey Mode's duplication menu.
+			// As such, this set is needed to manually indicate that this item is to be filtered under the "Tools" filter.
+			ItemID.Sets.DuplicationMenuToolsFilter[Item.type] = true;
 		}
 
 		public override void SetDefaults() {
@@ -69,7 +73,7 @@ namespace ExampleMod.Content.Items.Tools
 	public class ExampleCatchItemModification : GlobalItem
 	{
 		public override void OnSpawn(Item item, IEntitySource source) {
-			if (source is not EntitySource_CatchEntity catchEntity) {
+			if (source is not EntitySource_Caught catchEntity) {
 				return;
 			}
 

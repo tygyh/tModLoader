@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Graphics;
+using ReLogic.OS;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -35,7 +36,7 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 	private UILoaderAnimatedImage _uiLoader;
 	private UIElement _links;
 	private CancellationTokenSource _cts;
-	private bool dotnetSDKFound;
+	private static bool dotnetSDKFound;
 
 	public override void OnInitialize()
 	{
@@ -115,9 +116,9 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 
 		AddLink(Language.GetText("tModLoader.VersionUpgrade"), 0.5f, 0f, "https://github.com/tModLoader/tModLoader/wiki/Update-Migration-Guide");
 		AddLink(Language.GetText("tModLoader.WikiLink"), 0f, 0.5f, "https://github.com/tModLoader/tModLoader/wiki/");
-		string exampleModBranch = BuildInfo.IsStable ? "stable" : "1.4.4";
+		string exampleModBranch = BuildInfo.IsStable ? "stable" : (BuildInfo.IsPreview ? "preview" : "1.4.4");
 		AddLink(Language.GetText("tModLoader.ExampleModLink"), 1f, 0.5f, $"https://github.com/tModLoader/tModLoader/tree/{exampleModBranch}/ExampleMod");
-		string docsURL = BuildInfo.IsStable ? "1.4-stable" : "preview";
+		string docsURL = BuildInfo.IsStable ? "stable" : "preview";
 		AddLink(Language.GetText("tModLoader.DocumentationLink"), 0f, 1f, $"https://docs.tmodloader.net/docs/{docsURL}/annotated.html");
 		AddLink(Language.GetText("tModLoader.DiscordLink"), 1f, 1f, "https://tmodloader.net/discord");
 
@@ -178,7 +179,7 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 		link.OnMouseOut += delegate (UIMouseEvent evt, UIElement listeningElement) {
 			link.TextColor = Color.White;
 		};
-		link.OnLeftClick += delegate(UIMouseEvent evt, UIElement listeningElement) {
+		link.OnLeftClick += delegate (UIMouseEvent evt, UIElement listeningElement) {
 			SoundEngine.PlaySound(SoundID.MenuOpen);
 			Utils.OpenToURL(url);
 		};
@@ -231,6 +232,7 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 	public override void OnActivate()
 	{
 		_cts = new CancellationTokenSource();
+		Main.clrInput();
 		ModCompile.UpdateReferencesFolder();
 		_uIPanel.Append(_uiLoader);
 		_modList.Clear();
@@ -251,30 +253,33 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 	private bool ShowInfoMessages()
 	{
 		if (!ModLoader.SeenFirstLaunchModderWelcomeMessage) {
-			ShowWelcomeMessage("tModLoader.ViewOnGitHub", "https://github.com/tModLoader/tModLoader/wiki/Update-Migration-Guide");
+			ShowWelcomeMessage("tModLoader.MSFirstLaunchModderWelcomeMessage", "tModLoader.ViewOnGitHub", "https://github.com/tModLoader/tModLoader/wiki/tModLoader-guide-for-developers");
 			ModLoader.SeenFirstLaunchModderWelcomeMessage = true;
 			Main.SaveSettings();
 			return true;
 		}
 
 		if (!IsCompatibleDotnetSdkAvailable()) {
-			ShowWelcomeMessage("tModLoader.DownloadNetSDK", "https://github.com/tModLoader/tModLoader/wiki/tModLoader-guide-for-developers#developing-with-tmodloader", 888, PreviousUIState);
+			if (IsRunningInSandbox()) {
+				Utils.ShowFancyErrorMessage(Language.GetTextValue("tModLoader.DevModsInSandbox"), 888, PreviousUIState);
+			}
+			else {
+				ShowWelcomeMessage("tModLoader.MSNetSDKNotFound", "tModLoader.DownloadNetSDK", "https://github.com/tModLoader/tModLoader/wiki/tModLoader-guide-for-developers#net-sdk", 888, PreviousUIState);
+			}
+
 			return true;
 		}
 
 		return false;
 	}
 
-	private void ShowWelcomeMessage(string altButtonTextKey, string url, int gotoMenu = Interface.modSourcesID, UIState state = null)
+	private void ShowWelcomeMessage(string messageKey, string altButtonTextKey, string url, int gotoMenu = Interface.modSourcesID, UIState state = null)
 	{
-		Interface.infoMessage.Show(Language.GetTextValue("tModLoader.MSFirstLaunchModderWelcomeMessage"), gotoMenu, state, Language.GetTextValue(altButtonTextKey),
-		() => {
-			SoundEngine.PlaySound(SoundID.MenuOpen);
-			Utils.OpenToURL(url);
-		});
+		var dotnetVersion = Environment.Version.MajorMinor().ToString();
+		Interface.infoMessage.Show(Language.GetTextValue(messageKey, dotnetVersion), gotoMenu, state, Language.GetTextValue(altButtonTextKey, dotnetVersion), () => Utils.OpenToURL(url));
 	}
 
-	string GetCommandToFindPathOfExecutable()
+	private static string GetCommandToFindPathOfExecutable()
 	{
 		if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 			return "where";
@@ -285,60 +290,74 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 			return "which";
 
 		Logging.tML.Debug("Getting command for finding path of the executable failed due to an unsupported operating system");
-
 		return null;
 	}
 
-	string GetSystemDotnetPath()
+	private static IEnumerable<string> GetPossibleSystemDotnetPaths()
 	{
-		string commandToFindPathOfExecutable = GetCommandToFindPathOfExecutable();
-		if (commandToFindPathOfExecutable == null)
-			return null;
-
-		try {
-			string dotnetPath = Process.Start(new ProcessStartInfo {
-				FileName = commandToFindPathOfExecutable,
+		if (GetCommandToFindPathOfExecutable() is string cmd) {
+			yield return Process.Start(new ProcessStartInfo {
+				FileName = cmd,
 				Arguments = "dotnet",
 				UseShellExecute = false,
 				RedirectStandardOutput = true
-			}).StandardOutput.ReadToEnd().Trim();
+			}).StandardOutput.ReadToEnd().Split("\n")[0].Trim();
+		}
 
-			if (File.Exists(dotnetPath))
-				return dotnetPath;
+		// OSX fallback
+		var pathsFile = "/etc/paths.d/dotnet";
+		if (File.Exists(pathsFile)) {
+			var contents = File.ReadAllText(pathsFile).Trim();
+			Logging.tML.Debug($"Reading {pathsFile}: {contents}");
+			yield return contents + "/dotnet";
+		}
 
-			Logging.tML.Debug("Can't find dotnet on PATH");
+		// These fallbacks are generally pretty useless, since /usr/bin should almost always be on PATH
+		// env var, often set on Linux
+		if (Environment.GetEnvironmentVariable("DOTNET_ROOT") is string dotnetRoot) {
+			Logging.tML.Debug($"Found env var DOTNET_ROOT: {dotnetRoot}");
+			yield return $"{dotnetRoot}/dotnet";
+		}
 
-			// Steam might be launched with insufficient PATH (currently known on OSX)
-			var pathsFile = "/etc/paths.d/dotnet";
-			if (File.Exists(pathsFile)) {
-				var contents = File.ReadAllText(pathsFile).Trim();
-				Logging.tML.Debug($"Reading {pathsFile}: {contents}");
-				dotnetPath = contents + "/dotnet";
+		// The Scripted install installs the SDK to "$HOME/.dotnet" by default on Linux/Mac but will not permanently change $PATH. (Many Linux distributions have package manager instructions, but not all, so some might use scripted install: "./dotnet-install.sh -channel 6.0".) https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-install-script
+		yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "dotnet");
+
+		// general unix fallback
+		yield return "/usr/bin/dotnet";
+	}
+
+	private static string GetSystemDotnetPath()
+	{
+		try {
+			if (GetPossibleSystemDotnetPaths().FirstOrDefault(File.Exists) is string path) {
+				Logging.tML.Debug($"System dotnet install located at: {path}");
+				return path;
 			}
-
-			if (File.Exists(dotnetPath))
-				return dotnetPath;
 		}
-		catch (Exception e) {
-			Logging.tML.Debug("Finding dotnet on PATH failed: ", e);
-		}
+		catch (Exception) { }
 
+		Logging.tML.Debug("Finding dotnet on PATH failed");
 		return null;
 	}
 
-	bool IsCompatibleDotnetSdkAvailable()
+	private static bool IsCompatibleDotnetSdkAvailable()
 	{
 		if (dotnetSDKFound)
 			return true;
 
 		try {
+			string dotnetFilename = GetSystemDotnetPath() ?? "dotnet";
 			string output = Process.Start(new ProcessStartInfo {
-				FileName = GetSystemDotnetPath() ?? "dotnet",
+				FileName = dotnetFilename,
 				Arguments = "--list-sdks",
 				UseShellExecute = false,
 				RedirectStandardOutput = true
 			}).StandardOutput.ReadToEnd();
 			Logging.tML.Info("\n" + output);
+
+			if (Platform.IsWindows && dotnetFilename.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86))) {
+				Logging.tML.Warn("Building mods requires the 64 bit dotnet SDK to be installed, but the 32 bit dotnet SDK was found on the PATH. It is likely that you accidentally installed the 32 bit dotnet SDK and it is taking priority. This will prevent you from debugging or building mods in Visual Studio or any other IDE. To fix this, follow the instructions at https://github.com/tModLoader/tModLoader/wiki/tModLoader-guide-for-developers#net-sdk");
+			}
 
 			foreach (var line in output.Split('\n')) {
 				var dotnetVersion = new Version(new Regex("([0-9.]+).*").Match(line).Groups[1].Value);
@@ -355,14 +374,26 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 		return dotnetSDKFound;
 	}
 
+	private static bool IsRunningInSandbox()
+	{
+		if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FLATPAK_SANDBOX_DIR"))) {
+			Logging.tML.Debug("Flatpak sandbox detected");
+			return true;
+		}
+
+		return false;
+	}
+
 	internal void Populate()
 	{
 		Task.Run(() => {
 			var modSources = ModCompile.FindModSources();
-			var modFiles = ModOrganizer.FindDevFolderMods();
+
+			var modFiles = ModOrganizer.FindAllMods();
 			foreach (string sourcePath in modSources) {
-				var builtMod = modFiles.SingleOrDefault(m => m.Name == Path.GetFileName(sourcePath));
-				_items.Add(new UIModSourceItem(sourcePath, builtMod));
+				var modName = Path.GetFileName(sourcePath);
+				var builtMod = modFiles.Where(m => m.Name == modName).Where(m => m.location == ModLocation.Local).OrderByDescending(m => m.Version).FirstOrDefault();
+				_items.Add(new UIModSourceItem(sourcePath, builtMod, _cts.Token));
 			}
 			_updateNeeded = true;
 		});
@@ -371,6 +402,7 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 	public override void Update(GameTime gameTime)
 	{
 		base.Update(gameTime);
+		ModBrowser.UIModBrowser.PageUpDownSupport(_modList);
 		if (!_updateNeeded)
 			return;
 		_updateNeeded = false;
@@ -378,6 +410,24 @@ internal class UIModSources : UIState, IHaveBackButtonCommand
 		_modList.Clear();
 		string filter = filterTextBox.Text;
 		_modList.AddRange(_items.Where(item => filter.Length > 0 ? item.modName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) != -1 : true));
+		if (_items.Count == 0) {
+			var firstModGuidePanel = new UIPanel() {
+				Width = new(0, 1f),
+				Height = new(180, 0f),
+			};
+			firstModGuidePanel.OnLeftClick += (a, b) => {
+				Utils.OpenToURL("https://github.com/tModLoader/tModLoader/wiki/Basic-tModLoader-Modding-Guide");
+			};
+			var firstModGuideText = new UIText(Language.GetTextValue("tModLoader.MSNoModSourcesLinkToBasicModdingGuide")) {
+				IsWrapped = true,
+				WrappedTextBottomPadding = 0f,
+				Width = StyleDimension.Fill,
+				TextOriginX = 0f,
+				VAlign = 0.5f
+			};
+			firstModGuidePanel.Append(firstModGuideText);
+			_modList.Add(firstModGuidePanel);
+		}
 		Recalculate();
 		_modList.ViewPosition = modListViewPosition;
 	}

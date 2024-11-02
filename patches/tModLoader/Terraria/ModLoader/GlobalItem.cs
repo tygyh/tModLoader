@@ -8,12 +8,12 @@ using Terraria.ModLoader.IO;
 using Terraria.Utilities;
 using Terraria.ID;
 using Terraria.ModLoader.Core;
-using System;
 
 namespace Terraria.ModLoader;
 
 /// <summary>
-/// This class allows you to modify and use hooks for all items, including vanilla items. Create an instance of an overriding class then call Mod.AddGlobalItem to use this.
+/// This class allows you to modify and use hooks for all items, both vanilla and modded.
+/// <br/> To use it, simply create a new class deriving from this one. Implementations will be registered automatically.
 /// </summary>
 public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 {
@@ -30,24 +30,15 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	protected sealed override void Register()
 	{
-		ModTypeLookup<GlobalItem>.Register(this);
-
-		Index = (ushort)ItemLoader.globalItems.Count;
-
-		ItemLoader.globalItems.Add(this);
+		base.Register();
 	}
 
 	public sealed override void SetupContent() => SetStaticDefaults();
 
-	public GlobalItem Instance(Item item) => Instance(item.globalItems, Index);
-
 	/// <summary>
-	/// Allows you to set the properties of any and every item that gets created.
+	/// Called when the <paramref name="item"/> is created. The <paramref name="context"/> parameter indicates the context of the item creation and can be used in logic for the desired effect.
+	/// <para/> Known <see cref="ItemCreationContext"/> include: <see cref="InitializationItemCreationContext"/>, <see cref="BuyItemCreationContext"/>, <see cref="JourneyDuplicationItemCreationContext"/>, and <see cref="RecipeItemCreationContext"/>. Some of these provide additional context such as how <see cref="RecipeItemCreationContext"/> includes the items consumed to craft the <paramref name="item"/>.
 	/// </summary>
-	public virtual void SetDefaults(Item item)
-	{
-	}
-
 	public virtual void OnCreated(Item item, ItemCreationContext context)
 	{
 	}
@@ -149,7 +140,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	public virtual float UseSpeedMultiplier(Item item, Player player) => 1f;
 
 	/// <summary>
-	/// Allows you to temporarily modify the amount of life a life healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a healLife value.
+	/// Allows you to temporarily modify the amount of life a life healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a <see cref="Item.healLife"/> value.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -160,7 +151,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	}
 
 	/// <summary>
-	/// Allows you to temporarily modify the amount of mana a mana healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a healMana value.
+	/// Allows you to temporarily modify the amount of mana a mana healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a <see cref="Item.healMana"/> value.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -172,6 +163,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	/// <summary>
 	/// Allows you to temporarily modify the amount of mana an item will consume on use, based on player buffs, accessories, etc. This is only called for items with a mana value.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.mana"/>, modify the <paramref name="reduce"/> and <paramref name="mult"/> parameters.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -206,6 +198,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's damage based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.damage"/>, modify the <paramref name="damage"/> parameter.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -216,6 +209,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	/// <summary>
 	/// Allows you to set an item's sorting group in Journey Mode's duplication menu. This is useful for setting custom item types that group well together, or whenever the default vanilla sorting doesn't sort the way you want it.
+	/// <para/> Note that this affects the order of the item in the listing, not which filters the item satisfies.
 	/// </summary>
 	/// <param name="item">The item being used</param>
 	/// <param name="itemGroup">The item group this item is being assigned to</param>
@@ -235,7 +229,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	}
 
 	/// <summary>
-	/// Allows you to prevent an item from being researched by returning false. True is the default behaviour.
+	/// Allows you to prevent an item from being researched by returning false. True is the default behavior.
 	/// </summary>
 	/// <param name="item">The item being researched</param>
 	public virtual bool CanResearch(Item item)
@@ -244,7 +238,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	}
 
 	/// <summary>
-	/// Allows you to create custom behaviour when an item is accepted by the Research function 
+	/// Allows you to create custom behavior when an item is accepted by the Research function 
 	/// </summary>
 	/// <param name="item">The item being researched</param>
 	/// <param name="fullyResearched">True if the item was completely researched, and is ready to be duplicated, false if only partially researched.</param>
@@ -255,6 +249,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's knockback based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.knockBack"/>, modify the <paramref name="knockback"/> parameter.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -266,6 +261,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's crit chance based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.crit"/>, modify the <paramref name="crit"/> parameter.
 	/// </summary>
 	/// <param name="item">The item being used.</param>
 	/// <param name="player">The player using the item.</param>
@@ -467,6 +463,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	/// <summary>
 	/// Allows you to dynamically modify the given item's size for the given player, similarly to the effect of the Titan Glove.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.scale"/>, modify the <paramref name="scale"/> parameter.
 	/// </summary>
 	/// <param name="item">The item to modify the scale of.</param>
 	/// <param name="player">The player wielding the given item.</param>
@@ -698,8 +695,8 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	/// Allows you to determine special visual effects a vanity has on the player without having to code them yourself.
 	///
 	/// This method is not instanced.
-	/// </summary>
 	/// <example><code>player.armorEffectDrawShadow = true;</code></example>
+	/// </summary>
 	public virtual void ArmorSetShadows(Player player, string set)
 	{
 	}
@@ -738,7 +735,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	/// <summary>
 	/// Allows you to add and modify the loot items that spawn from bag items when opened.
-	/// <br/> The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-NPC-Drops-and-Loot-1.4">Basic NPC Drops and Loot 1.4 Guide</see> explains how to use the <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> hook to modify NPC loot as well as this hook. A common usage is to use this hook and <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> to edit non-expert exlclusive drops for bosses.
+	/// <br/> The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-NPC-Drops-and-Loot-1.4">Basic NPC Drops and Loot 1.4 Guide</see> explains how to use the <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> hook to modify NPC loot as well as this hook. A common usage is to use this hook and <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> to edit non-expert exclusive drops for bosses.
 	/// <br/> This hook only runs once per item type during mod loading, any dynamic behavior must be contained in the rules themselves.
 	/// <br/> This hook is not instanced.
 	/// </summary>
@@ -780,7 +777,7 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 	/// </summary>
 	/// <param name="destination">The item instance that <paramref name="source"/> will attempt to stack onto</param>
 	/// <param name="source">The item instance being stacked onto <paramref name="destination"/></param>
-	/// <param name="numToTransfer">The quanity of <paramref name="source"/> that will be transferred to <paramref name="destination"/></param>
+	/// <param name="numToTransfer">The quantity of <paramref name="source"/> that will be transferred to <paramref name="destination"/></param>
 	public virtual void OnStack(Item destination, Item source, int numToTransfer)
 	{
 	}
@@ -810,12 +807,19 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	/// <summary>
 	/// This hook gets called when the player clicks on the reforge button and can afford the reforge.
-	/// Returns whether the reforge will take place. If false is returned, the PostReforge hook is never called.
+	/// Returns whether the reforge will take place. If false is returned by the ModItem or any GlobalItem, the item will not be reforged, the cost to reforge will not be paid, and PreRefoge and PostReforge hooks will not be called.
 	/// Reforging preserves modded data on the item.
 	/// </summary>
-	public virtual bool PreReforge(Item item)
+	public virtual bool CanReforge(Item item)
 	{
 		return true;
+	}
+
+	/// <summary>
+	/// This hook gets called immediately before an item gets reforged by the Goblin Tinkerer.
+	/// </summary>
+	public virtual void PreReforge(Item item)
+	{
 	}
 
 	/// <summary>
@@ -935,7 +939,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to draw things behind an item, or to modify the way an item is drawn in the world. Return false to stop the game from drawing the item (useful if you're manually drawing the item). Returns true by default.
+	/// <inheritdoc cref="ModItem.PreDrawInWorld(SpriteBatch, Color, Color, ref float, ref float, int)"/>
 	/// </summary>
 	public virtual bool PreDrawInWorld(Item item, SpriteBatch spriteBatch, Color lightColor, Color alphaColor, ref float rotation, ref float scale, int whoAmI)
 	{
@@ -943,14 +947,14 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to draw things in front of an item. This method is called even if PreDrawInWorld returns false.
+	/// <inheritdoc cref="ModItem.PostDrawInWorld(SpriteBatch, Color, Color, float, float, int)"/>
 	/// </summary>
 	public virtual void PostDrawInWorld(Item item, SpriteBatch spriteBatch, Color lightColor, Color alphaColor, float rotation, float scale, int whoAmI)
 	{
 	}
 
 	/// <summary>
-	/// Allows you to draw things behind an item in the inventory. Return false to stop the game from drawing the item (useful if you're manually drawing the item). Returns true by default.
+	/// <inheritdoc cref="ModItem.PreDrawInInventory(SpriteBatch, Vector2, Rectangle, Color, Color, Vector2, float)"/>
 	/// </summary>
 	public virtual bool PreDrawInInventory(Item item, SpriteBatch spriteBatch, Vector2 position, Rectangle frame,
 		Color drawColor, Color itemColor, Vector2 origin, float scale)
@@ -959,7 +963,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to draw things in front of an item in the inventory. This method is called even if PreDrawInInventory returns false.
+	/// <inheritdoc cref="ModItem.PostDrawInInventory(SpriteBatch, Vector2, Rectangle, Color, Color, Vector2, float)"/>
 	/// </summary>
 	public virtual void PostDrawInInventory(Item item, SpriteBatch spriteBatch, Vector2 position, Rectangle frame,
 		Color drawColor, Color itemColor, Vector2 origin, float scale)
@@ -972,8 +976,8 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	/// Return null to use the item's default holdout offset; returns null by default.
 	///
 	/// This method is not instanced.
-	/// </summary>
 	/// <example><code>return new Vector2(10, 0);</code></example>
+	/// </summary>
 	public virtual Vector2? HoldoutOffset(int type)
 	{
 		return null;
@@ -994,7 +998,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	/// <summary>
 	/// Allows you to disallow the player from equipping an accessory. Return false to disallow equipping the accessory. Returns true by default.
 	/// </summary>
-	/// <param name="item">The item that is attepting to equip.</param>
+	/// <param name="item">The item that is attempting to equip.</param>
 	/// <param name="player">The player.</param>
 	/// <param name="slot">The inventory slot that the item is attempting to occupy.</param>
 	/// <param name="modded">If the inventory slot index is for modded slots.</param>
@@ -1013,13 +1017,12 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to modify what item, and in what quantity, is obtained when an item of the given type is fed into the Extractinator.
-	/// <br/> An extractType of 0 represents the default extraction (Silt and Slush). 0, <see cref="ItemID.DesertFossil"/>, <see cref="ItemID.OldShoe"/>, and <see cref="ItemID.LavaMoss"/> are vanilla extraction types. Modded types by convention will correspond to the iconic item of the extraction type. The <see href="https://terraria.wiki.gg/wiki/Extractinator">Extractinator wiki page</see> has more info.
-	/// <br/> By default the parameters will be set to the output of feeding Silt/Slush into the Extractinator.
-	/// <br/> Use <paramref name="extractinatorBlockType"/> to provide different behavior for <see cref="TileID.ChlorophyteExtractinator"/> if desired.
-	/// <br/> If the Chlorophyte Extractinator item swapping behavior is desired, see the example in ExampleAdvancedFlail.cs.
-	/// <br/> 
-	/// <br/> This method is not instanced.
+	/// Allows you to modify what item, and in what quantity, is obtained when an item of the given type is fed into the Extractinator. Use <see cref="ItemID.Sets.ExtractinatorMode"/> to allow an item to be fed into the Extractinator.
+	/// <para/> An extractType of 0 represents the default extraction (Silt and Slush). 0, <see cref="ItemID.DesertFossil"/>, <see cref="ItemID.OldShoe"/>, and <see cref="ItemID.LavaMoss"/> are vanilla extraction types. Modded types by convention will correspond to the iconic item of the extraction type. The <see href="https://terraria.wiki.gg/wiki/Extractinator">Extractinator wiki page</see> has more info.
+	/// <para/> By default the parameters will be set to the output of feeding Silt/Slush into the Extractinator.
+	/// <para/> Use <paramref name="extractinatorBlockType"/> to provide different behavior for <see cref="TileID.ChlorophyteExtractinator"/> if desired.
+	/// <para/> If the Chlorophyte Extractinator item swapping behavior is desired, see the example in <see href="https://github.com/tModLoader/tModLoader/blob/stable/ExampleMod/Common/GlobalItems/TorchExtractinatorGlobalItem.cs">TorchExtractinatorGlobalItem.cs</see>.
+	/// <para/> This method is not instanced.
 	/// </summary>
 	/// <param name="extractType">The extractinator type corresponding to the items being processed</param>
 	/// <param name="extractinatorBlockType">Which Extractinator tile is being used, <see cref="TileID.Extractinator"/> or <see cref="TileID.ChlorophyteExtractinator"/>.</param>
@@ -1109,7 +1112,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to modify all the tooltips that display for the given item. See here for information about TooltipLine.
+	/// Allows you to modify all the tooltips that display for the given item. See here for information about TooltipLine. To hide tooltips, please use <see cref="TooltipLine.Hide"/> and defensive coding.
 	/// </summary>
 	public virtual void ModifyTooltips(Item item, List<TooltipLine> tooltips)
 	{

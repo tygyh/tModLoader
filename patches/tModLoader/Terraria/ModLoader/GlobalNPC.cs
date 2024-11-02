@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Terraria.DataStructures;
 using Terraria.GameContent;
 using Terraria.GameContent.Bestiary;
+using Terraria.GameContent.UI;
 using Terraria.ID;
 using Terraria.ModLoader.Core;
 using Terraria.ModLoader.IO;
@@ -13,7 +14,8 @@ using Terraria.ModLoader.IO;
 namespace Terraria.ModLoader;
 
 /// <summary>
-/// This class allows you to modify and use hooks for all NPCs, including vanilla mobs. Create an instance of an overriding class then call Mod.AddGlobalNPC to use this.
+/// This class allows you to modify and use hooks for all NPCs, both vanilla and modded.
+/// <br/> To use it, simply create a new class deriving from this one. Implementations will be registered automatically.
 /// </summary>
 public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 {
@@ -27,21 +29,17 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 
 	protected sealed override void Register()
 	{
-		ModTypeLookup<GlobalNPC>.Register(this);
-
-		Index = (ushort)NPCLoader.globalNPCs.Count;
-
-		NPCLoader.globalNPCs.Add(this);
+		base.Register();
 	}
 
 	public sealed override void SetupContent() => SetStaticDefaults();
 
-	public GlobalNPC Instance(NPC npc) => Instance(npc.globalNPCs, Index);
-
 	/// <summary>
-	/// Allows you to set the properties of any and every NPC that gets created.
+	/// Called after SetDefaults for NPCs with a negative <see cref="NPC.netID"/><br/>
+	/// This hook is required because <see cref="NPC.SetDefaultsFromNetId"/> only sets <see cref="NPC.netID"/> after SetDefaults<br/>
+	/// Remember that <see cref="NPC.type"/> does not support negative numbers and AppliesToEntity cannot distinguish between NPCs with the same type but different netID<br/>
 	/// </summary>
-	public virtual void SetDefaults(NPC npc)
+	public virtual void SetDefaultsFromNetId(NPC npc)
 	{
 	}
 
@@ -150,7 +148,7 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	/// <summary>
 	/// Use this judiciously to avoid straining the network.
 	/// <br/>Checks and methods such as <see cref="GlobalType{TEntity, TGlobal}.AppliesToEntity"/> can reduce how much data must be sent for how many projectiles.
-	/// <br/>Called whenever <see cref="MessageID.SyncNPC"/> is successfully sent, for example on projectile creation, or whenever Projectile.netUpdate is set to true in the update loop for that tick.
+	/// <br/>Called whenever <see cref="MessageID.SyncNPC"/> is successfully sent, for example on NPC creation, on player join, or whenever NPC.netUpdate is set to true in the update loop for that tick.
 	/// <br/>Can be called on the server.
 	/// </summary>
 	/// <param name="npc">The NPC.</param>
@@ -182,16 +180,19 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	}
 
 	/// <summary>
-	/// Allows you to make things happen whenever an NPC is hit, such as creating dust or gores. <br/> 
-	/// Called on local, server and remote clients. <br/> 
-	/// Usually when something happens when an npc dies such as item spawning, you use NPCLoot, but you can use HitEffect paired with a check for <c>if (npc.life &lt;= 0)</c> to do client-side death effects, such as spawning dust, gore, or death sounds. <br/> 
+	/// Allows you to make things happen whenever an NPC is hit, such as creating dust or gores. <br/>
+	/// Called on local, server and remote clients. <br/>
+	/// Usually when something happens when an npc dies such as item spawning, you use NPCLoot, but you can use HitEffect paired with a check for <c>if (npc.life &lt;= 0)</c> to do client-side death effects, such as spawning dust, gore, or death sounds. <br/>
 	/// </summary>
 	public virtual void HitEffect(NPC npc, NPC.HitInfo hit)
 	{
 	}
 
 	/// <summary>
-	/// Allows you to make the NPC either regenerate health or take damage over time by setting npc.lifeRegen. Regeneration or damage will occur at a rate of half of npc.lifeRegen per second. The damage parameter is the number that appears above the NPC's head if it takes damage over time.
+	/// Allows you to make the NPC either regenerate health or take damage over time by setting <see cref="NPC.lifeRegen"/>. This is useful for implementing damage over time debuffs such as <see cref="BuffID.Poisoned"/> or <see cref="BuffID.OnFire"/>. Regeneration or damage will occur at a rate of half of <see cref="NPC.lifeRegen"/> per second.
+	/// <para/>Essentially, modders implementing damage over time debuffs should subtract from <see cref="NPC.lifeRegen"/> a number that is twice as large as the intended damage per second. See <see href="https://github.com/tModLoader/tModLoader/blob/stable/ExampleMod/Common/GlobalNPCs/DamageOverTimeGlobalNPC.cs#L16">DamageOverTimeGlobalNPC.cs</see> for an example of this.
+	/// <para/>The damage parameter is the number that appears above the NPC's head if it takes damage over time.
+	/// <para/>Multiple debuffs work together by following some conventions: <see cref="NPC.lifeRegen"/> should not be assigned a number, rather it should be subtracted from. <paramref name="damage"/> should only be assigned if the intended popup text is larger then its current value.  
 	/// </summary>
 	/// <param name="npc"></param>
 	/// <param name="damage"></param>
@@ -239,7 +240,8 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	}
 
 	/// <summary>
-	/// Allows you to make things happen when an NPC dies (for example, setting ModSystem fields). This hook runs on the server/single player. For client-side effects, such as dust, gore, and sounds, see HitEffect
+	/// Allows you to make things happen when an NPC dies (for example, setting ModSystem fields). This hook runs on the server/single player. For client-side effects, such as dust, gore, and sounds, see HitEffect.
+	/// <para/> Most item drops should be done via drop rules registered in <see cref="ModifyNPCLoot(NPC, NPCLoot)"/> or <see cref="ModifyGlobalLoot(GlobalLoot)"/>. Some dynamic NPC drops, such as additional hearts, are more suited for OnKill instead. <see href="https://github.com/tModLoader/tModLoader/blob/stable/ExampleMod/Content/NPCs/MinionBoss/MinionBossMinion.cs#L101">MinionBossMinion.cs</see> shows an example of an NPC that drops additional hearts. See <see cref="NPC.lastInteraction"/> and <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-NPC-Drops-and-Loot-1.4#player-who-killed-npc">Player who killed NPC wiki section</see> as well for determining which players attacked or killed this NPC.
 	/// </summary>
 	/// <param name="npc"></param>
 	public virtual void OnKill(NPC npc)
@@ -304,7 +306,7 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	}
 
 	/// <summary>
-	/// Allows you to determine whether an NPC can hit the given player. Return false to block the NPC from hitting the target. Returns true by default. CooldownSlot determines which of the player's cooldown counters to use (-1, 0, or 1), and defaults to -1.
+	/// Allows you to determine whether an NPC can hit the given player. Return false to block the NPC from hitting the target. Returns true by default. CooldownSlot determines which of the player's cooldown counters (<see cref="ImmunityCooldownID"/>) to use, and defaults to -1 (<see cref="ImmunityCooldownID.General"/>).
 	/// </summary>
 	/// <param name="npc"></param>
 	/// <param name="target"></param>
@@ -348,6 +350,17 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	}
 
 	/// <summary>
+	/// Allows you to determine whether a friendly NPC can be hit by an NPC. Return false to block the attacker from hitting the NPC, and return true to use the vanilla code for whether the target can be hit. Returns true by default.
+	/// </summary>
+	/// <param name="npc"></param>
+	/// <param name="attacker"></param>
+	/// <returns></returns>
+	public virtual bool CanBeHitByNPC(NPC npc, NPC attacker)
+	{
+		return true;
+	}
+
+	/// <summary>
 	/// Allows you to modify the damage, knockback, etc., that an NPC does to a friendly NPC.
 	/// </summary>
 	/// <param name="npc"></param>
@@ -383,6 +396,7 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	/// Allows you to determine whether an NPC can be collided with the player melee weapon when swung. <br/>
 	/// Use <see cref="CanBeHitByItem(NPC, Player, Item)"/> instead for Guide Voodoo Doll-type effects.
 	/// </summary>
+	/// <param name="npc">The NPC being collided with</param>
 	/// <param name="player">The player wielding this item.</param>
 	/// <param name="item">The weapon item the player is holding.</param>
 	/// <param name="meleeAttackHitbox">Hitbox of melee attack.</param>
@@ -644,12 +658,12 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	/// <summary>
 	/// Allows you to modify the contents of a shop whenever player opens it. <br/>
 	/// If possible, use <see cref="ModifyShop(NPCShop)"/> instead, to reduce mod conflicts and improve compatibility.
-	/// Note that for special shops like travelling merchant, the <paramref name="shopId"/> may not correspond to a <see cref="NPCShop"/> in the <see cref="NPCShopDatabase"/>
+	/// Note that for special shops like travelling merchant, the <paramref name="shopName"/> may not correspond to a <see cref="NPCShop"/> in the <see cref="NPCShopDatabase"/>
+	/// <para/> Also note that unused slots in <paramref name="items"/> are null while <see cref="Item.IsAir"/> entries are entries that have a reserved slot (<see cref="NPCShop.Entry.SlotReserved"/>) but did not have their conditions met. These should not be overwritten.
 	/// </summary>
 	/// <param name="npc">An instance of <seealso cref="NPC"/> that currently player talks to.</param>
 	/// <param name="shopName">The full name of the shop being opened. See <see cref="NPCShopDatabase.GetShopName"/> for the format. </param>
 	/// <param name="items">Items in the shop including 'air' items in empty slots.</param>
-	/// <summary>
 	public virtual void ModifyActiveShop(NPC npc, string shopName, Item[] items)
 	{
 	}
@@ -676,7 +690,7 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	*/
 
 	/// <summary>
-	/// Whether this NPC can be telported a King or Queen statue. Return true to allow the NPC to teleport to the statue, return false to block this NPC from teleporting to the statue, and return null to use the vanilla code for whether the NPC can teleport to the statue. Returns null by default.
+	/// Whether this NPC can be teleported to a King or Queen statue. Return true to allow the NPC to teleport to the statue, return false to block this NPC from teleporting to the statue, and return null to use the vanilla code for whether the NPC can teleport to the statue. Returns null by default.
 	/// </summary>
 	/// <param name="npc">The NPC</param>
 	/// <param name="toKingStatue">Whether the NPC is being teleported to a King or Queen statue.</param>
@@ -793,7 +807,7 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	}
 
 	/// <summary>
-	/// Allows you to modify the npc's <seealso cref="ID.ImmunityCooldownID"/>, damage multiplier, and hitbox. Useful for implementing dynamic damage hitboxes that change in dimensions or deal extra damage. Returns false to prevent vanilla code from running. Returns true by default.
+	/// Allows you to modify the NPC's <seealso cref="ID.ImmunityCooldownID"/>, damage multiplier, and hitbox. Useful for implementing dynamic damage hitboxes that change in dimensions or deal extra damage. Returns false to prevent vanilla code from running. Returns true by default.
 	/// </summary>
 	/// <param name="npc"></param>
 	/// <param name="victimHitbox"></param>
@@ -837,6 +851,34 @@ public abstract class GlobalNPC : GlobalType<NPC, GlobalNPC>
 	/// <param name="npc"></param>
 	/// <param name="tag"></param>
 	public virtual void LoadData(NPC npc, TagCompound tag)
+	{
+	}
+
+	/// <summary>
+	/// Allows you to change the emote that the NPC will pick
+	/// </summary>
+	/// <param name="npc"></param>
+	/// <param name="closestPlayer">The <see cref="Player"/> closest to the NPC. You can check the biome the player is in and let the NPC pick the emote that corresponds to the biome.</param>
+	/// <param name="emoteList">A list of emote IDs from which the NPC will randomly select one</param>
+	/// <param name="otherAnchor">A <see cref="WorldUIAnchor"/> instance that indicates the target of this emote conversation. Use this to get the instance of the <see cref="NPC"/> or <see cref="Player"/> this NPC is talking to.</param>
+	/// <returns>Return null to use vanilla mechanic (pick one from the list), otherwise pick the emote by the returned ID. Returning -1 will prevent the emote from being used. Returns null by default</returns>
+	public virtual int? PickEmote(NPC npc, Player closestPlayer, List<int> emoteList, WorldUIAnchor otherAnchor)
+	{
+		return null;
+	}
+
+	/// <inheritdoc cref="ModNPC.ChatBubblePosition(ref Vector2, ref SpriteEffects)"/>
+	public virtual void ChatBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+	}
+
+	/// <inheritdoc cref="ModNPC.PartyHatPosition(ref Vector2, ref SpriteEffects)"/>
+	public virtual void PartyHatPosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+	}
+
+	/// <inheritdoc cref="ModNPC.EmoteBubblePosition(ref Vector2, ref SpriteEffects)"/>
+	public virtual void EmoteBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
 	{
 	}
 }

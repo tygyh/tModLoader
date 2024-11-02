@@ -1,8 +1,8 @@
-﻿using System;
-using ExampleMod.Content.Tiles;
+﻿using ExampleMod.Content.Tiles;
 using ExampleMod.Content.Tiles.Furniture;
 using ExampleMod.Content.Walls;
 using Microsoft.Xna.Framework;
+using System;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -21,6 +21,10 @@ namespace ExampleMod.Content.Items.Ammo
 			Item.DefaultToSolution(ModContent.ProjectileType<ExampleSolutionProjectile>());
 			Item.value = Item.buyPrice(0, 0, 25);
 			Item.rare = ItemRarityID.Orange;
+		}
+
+		public override void ModifyResearchSorting(ref ContentSamples.CreativeHelper.ItemGroup itemGroup) {
+			itemGroup = ContentSamples.CreativeHelper.ItemGroup.Solutions;
 		}
 
 		// Please see Content/ExampleRecipes.cs for a detailed explanation of recipe creation.
@@ -97,9 +101,12 @@ namespace ExampleMod.Content.Items.Ammo
 						int type = Main.tile[k, l].TileType;
 						int wall = Main.tile[k, l].WallType;
 
-						// Convert all walls to ExampleWall
-						if (wall != 0) {
-							Main.tile[k, l].WallType = (ushort)ModContent.WallType<ExampleWall>();
+						// Convert all walls to ExampleWall (or ExampleWallUnsafe for SpiderUnsafe)
+						if (wall != 0 && wall != ModContent.WallType<ExampleWallUnsafe>()) {
+							if (wall == WallID.SpiderUnsafe)
+								Main.tile[k, l].WallType = (ushort)ModContent.WallType<ExampleWallUnsafe>();
+							else
+								Main.tile[k, l].WallType = (ushort)ModContent.WallType<ExampleWall>();
 							WorldGen.SquareWallFrame(k, l);
 							NetMessage.SendTileSquare(-1, k, l, 1);
 						}
@@ -111,11 +118,11 @@ namespace ExampleMod.Content.Items.Ammo
 							NetMessage.SendTileSquare(-1, k, l, 1);
 						}
 						// If the tile is sand, convert to ExampleSand
-						// else if (TileID.Sets.Conversion.Sand[type]) {
-						// 	Main.tile[k, l].type = (ushort)TileType<ExampleSand>();
-						// 	WorldGen.SquareTileFrame(k, l);
-						// 	NetMessage.SendTileSquare(-1, k, l, 1);
-						// }
+						else if (TileID.Sets.Conversion.Sand[type]) {
+							Main.tile[k, l].TileType = (ushort)ModContent.TileType<ExampleSand>();
+							WorldGen.SquareTileFrame(k, l);
+							NetMessage.SendTileSquare(-1, k, l, 1);
+						}
 						// If the tile is a chair, convert to ExampleChair
 						else if (type == TileID.Chairs && Main.tile[k, l - 1].TileType == TileID.Chairs) {
 							Main.tile[k, l].TileType = (ushort)ModContent.TileType<ExampleChair>();

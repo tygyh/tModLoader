@@ -4,6 +4,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
 using Terraria.ID;
+using Terraria.Localization;
+using Terraria.Map;
 using Terraria.ModLoader.IO;
 
 namespace Terraria.ModLoader.Config;
@@ -19,7 +21,7 @@ public abstract class EntityDefinition : TagSerializable
 	public string Name;
 
 	// Check if the type is invalid and the Mod/Name pair is NOT vanilla
-	public bool IsUnloaded
+	public virtual bool IsUnloaded
 		=> Type <= 0 && !(Mod == "Terraria" && Name == "None" || Mod == "" && Name == "");
 
 	[JsonIgnore]
@@ -62,6 +64,8 @@ public abstract class EntityDefinition : TagSerializable
 	public override string ToString()
 		=> $"{Mod}/{Name}";
 
+	public virtual string DisplayName => ToString();
+
 	public override int GetHashCode()
 		=> new { Mod, Name }.GetHashCode();
 
@@ -75,7 +79,7 @@ public abstract class EntityDefinition : TagSerializable
 }
 
 /// <summary>
-/// ItemDefinition represents an Item identity. A typical use for this class is usage in ModConfig, perhapse to facilitate an Item tweaking mod.
+/// ItemDefinition represents an Item identity. A typical use for this class is usage in ModConfig, perhaps to facilitate an Item tweaking mod.
 /// </summary>
 // JSONItemConverter should allow this to be used as a dictionary key.
 [TypeConverter(typeof(ToFromStringConverter<ItemDefinition>))]
@@ -87,6 +91,7 @@ public class ItemDefinition : EntityDefinition
 	public override int Type => ItemID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
 
 	public ItemDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="ItemDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
 	public ItemDefinition(int type) : base(ItemID.Search.GetName(type)) { }
 	public ItemDefinition(string key) : base(key) { }
 	public ItemDefinition(string mod, string name) : base(mod, name) { }
@@ -96,6 +101,8 @@ public class ItemDefinition : EntityDefinition
 
 	public static ItemDefinition Load(TagCompound tag)
 		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	public override string DisplayName => IsUnloaded ? Language.GetTextValue("Mods.ModLoader.Items.UnloadedItem.DisplayName") : Lang.GetItemNameValue(Type);
 }
 
 [TypeConverter(typeof(ToFromStringConverter<ProjectileDefinition>))]
@@ -106,6 +113,7 @@ public class ProjectileDefinition : EntityDefinition
 	public override int Type => ProjectileID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
 
 	public ProjectileDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="ProjectileDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
 	public ProjectileDefinition(int type) : base(ProjectileID.Search.GetName(type)) { }
 	public ProjectileDefinition(string key) : base(key) { }
 	public ProjectileDefinition(string mod, string name) : base(mod, name) { }
@@ -115,6 +123,9 @@ public class ProjectileDefinition : EntityDefinition
 
 	public static ProjectileDefinition Load(TagCompound tag)
 		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	// Projectile display names sometimes don't exist or sometimes are shared, it might be better to use Name for ModConfig in those situations?
+	public override string DisplayName => IsUnloaded ? Language.GetTextValue("Mods.ModLoader.Unloaded") : Lang.GetProjectileName(Type).Value;
 }
 
 [TypeConverter(typeof(ToFromStringConverter<NPCDefinition>))]
@@ -126,6 +137,7 @@ public class NPCDefinition : EntityDefinition
 	public override int Type => NPCID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
 
 	public NPCDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="NPCDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
 	public NPCDefinition(int type) : base(NPCID.Search.GetName(type)) { }
 	public NPCDefinition(string key) : base(key) { }
 	public NPCDefinition(string mod, string name) : base(mod, name) { }
@@ -135,6 +147,8 @@ public class NPCDefinition : EntityDefinition
 
 	public static NPCDefinition Load(TagCompound tag)
 		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	public override string DisplayName => IsUnloaded ? Language.GetTextValue("Mods.ModLoader.Unloaded") : Lang.GetNPCNameValue(Type);
 }
 
 [TypeConverter(typeof(ToFromStringConverter<PrefixDefinition>))]
@@ -142,9 +156,16 @@ public class PrefixDefinition : EntityDefinition
 {
 	public static readonly Func<TagCompound, PrefixDefinition> DESERIALIZER = Load;
 
-	public override int Type => PrefixID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
+	public override int Type {
+		get {
+			if (Mod == "Terraria" && Name == "None")
+				return 0;
+			return PrefixID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
+		}
+	}
 
 	public PrefixDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="PrefixDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
 	public PrefixDefinition(int type) : base(PrefixID.Search.GetName(type)) { }
 	public PrefixDefinition(string key) : base(key) { }
 	public PrefixDefinition(string mod, string name) : base(mod, name) { }
@@ -154,12 +175,82 @@ public class PrefixDefinition : EntityDefinition
 
 	public static PrefixDefinition Load(TagCompound tag)
 		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	public override string DisplayName {
+		get {
+			if (IsUnloaded)
+				return Language.GetTextValue("Mods.ModLoader.Unloaded");
+			if(Type == 0)
+				return Lang.inter[23].Value;
+			return Lang.prefix[Type].Value;
+		}
+	}
+}
+
+[TypeConverter(typeof(ToFromStringConverter<BuffDefinition>))]
+public class BuffDefinition : EntityDefinition
+{
+	public static readonly Func<TagCompound, BuffDefinition> DESERIALIZER = Load;
+
+	public override int Type {
+		get {
+			if (Mod == "Terraria" && Name == "None")
+				return 0;
+			return BuffID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
+		}
+	}
+
+	public BuffDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="BuffDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
+	public BuffDefinition(int type) : base(BuffID.Search.GetName(type)) { }
+	public BuffDefinition(string key) : base(key) { }
+	public BuffDefinition(string mod, string name) : base(mod, name) { }
+
+	public static BuffDefinition FromString(string s)
+		=> new(s);
+
+	public static BuffDefinition Load(TagCompound tag)
+		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	public override string DisplayName => IsUnloaded ? Language.GetTextValue("Mods.ModLoader.Unloaded") : Lang.GetBuffName(Type);
+}
+
+[TypeConverter(typeof(ToFromStringConverter<TileDefinition>))]
+public class TileDefinition : EntityDefinition
+{
+	public static readonly Func<TagCompound, TileDefinition> DESERIALIZER = Load;
+
+	// Tile ids start from 0 for some reason
+	public override bool IsUnloaded
+		=> Type < 0 && !(Mod == "Terraria" && Name == "None" || Mod == "" && Name == "");
+
+	// TODO: doesn't handle tile styles, should implement when NPCs get negative id support
+	public override int Type => TileID.Search.TryGetId(Mod != "Terraria" ? $"{Mod}/{Name}" : Name, out int id) ? id : -1;
+
+	public TileDefinition() : base() { }
+	/// <summary><b>Note: </b>As ModConfig loads before other content, make sure to only use <see cref="TileDefinition(string, string)"/> for modded content in ModConfig classes. </summary>
+	public TileDefinition(int type) : base(TileID.Search.GetName(type)) { }
+	public TileDefinition(string key) : base(key) { }
+	public TileDefinition(string mod, string name) : base(mod, name) { }
+
+	public static TileDefinition FromString(string s)
+		=> new(s);
+
+	public static TileDefinition Load(TagCompound tag)
+		=> new(tag.GetString("mod"), tag.GetString("name"));
+
+	public override string DisplayName
+		=> IsUnloaded || Type == -1
+		? Language.GetTextValue("Mods.ModLoader.Unloaded")
+		: (Main.dedServ || (string.IsNullOrEmpty(Lang.GetMapObjectName(MapHelper.TileToLookup(Type, 0))))
+		? Name
+		: $"{Name} \"{Lang.GetMapObjectName(MapHelper.TileToLookup(Type, 0))}\"");
 }
 
 /// <summary>
 /// This TypeConverter facilitates converting to and from the string Type. This is necessary for Objects that are to be used as Dictionary keys, since the JSON for keys needs to be a string. Classes annotated with this TypeConverter need to implement a static FromString method that returns T.
 /// </summary>
-/// <typeparam name="T">The Type that implementes the static FromString method that returns Type T.</typeparam>
+/// <typeparam name="T">The Type that implements the static FromString method that returns Type T.</typeparam>
 public class ToFromStringConverter<T> : TypeConverter
 {
 	public override bool CanConvertTo(ITypeDescriptorContext context, Type destinationType)

@@ -17,13 +17,23 @@ namespace Terraria.ModLoader;
 /// </summary>
 public abstract class ModTile : ModBlockType
 {
-	/// <summary> The height of a group of animation frames for this tile. Defaults to 0, which disables animations. </summary>
+	/// <summary> The height of a group of animation frames for this tile. Defaults to 0, which disables animations. 
+	/// <para/> Used in conjunction with <see cref="AnimateTile(ref int, ref int)"/> to automatically animate tiles. Use <see cref="AnimateIndividualTile(int, int, int, ref int, ref int)"/> as well if needed.
+	/// <para/> An easy way to set this correctly without doing any math is to set this to the value of <see cref="TileObjectData.CoordinateFullHeight"/>.
+	/// <para/> Note that this assumes animation frames are laid out vertically in the tile spritesheet, if that is not the case then <see cref="AnimateIndividualTile"/> will need to be used to apply AnimationFrameHeight to X coordinates instead.
+	/// </summary>
 	public int AnimationFrameHeight { get; set; }
 
-	/// <summary> A multiplier describing how much this block resists harvesting. Higher values will make it take longer to harvest. Defaults to 1f. </summary>
+	/// <summary> A multiplier describing how much this block resists harvesting. Higher values will make it take longer to harvest. <br/> Defaults to 1f.
+	/// <para/> For example a MineResist value of 2f, such as used by <see cref="TileID.Pearlstone"/>, would require roughly twice as many hits to mine. Conversely, a MineResist value of 0.5f, such as used by <see cref="TileID.Sand"/>, would require roughtly half as many hits to mine
+	/// <para/> To find an appropriate value, see the <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Tile#mineresist">wiki</see>.
+	/// <para/> Use <see cref="MinPick"/> to adjust the minimum pickaxe power required to mine this tile. </summary>
 	public float MineResist { get; set; } = 1f;
 
-	/// <summary> The minimum pickaxe power required for pickaxes to mine this block. Defaults to 0. </summary>
+	/// <summary> The minimum pickaxe power required for pickaxes to mine this block. <br/> Defaults to 0.
+	/// <para/> For example a MinPick value of 50, such as what <see cref="TileID.Meteorite"/> uses, would require a pickaxe with at least 50% pickaxe power (<see cref="Item.pick"/>) to break.
+	/// <para/> To find an appropriate value, see the <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Tile#minpick">wiki</see>.
+	/// <para/> Use <see cref="MineResist"/> to adjust how long a tile takes to be mined.</summary>
 	public int MinPick { get; set; }
 
 	/// <summary> An array of the IDs of tiles that this tile can be considered as when looking for crafting stations. </summary>
@@ -48,7 +58,10 @@ public abstract class ModTile : ModBlockType
 	/// <summary>
 	/// Adds an entry to the minimap for this tile with the given color and display name. This should be called in SetDefaults.
 	/// <br/> For a typical tile that has a map display name, use <see cref="ModBlockType.CreateMapEntryName"/> as the name parameter for a default key using the pattern "Mods.{ModName}.Tiles.{ContentName}.MapEntry".
-	/// <br/> If a tile will be using multiple map entries, it is suggested to use <c>this.GetLocalization("CustomMapEntryName")</c>.
+	/// <br/> If a tile will be using multiple map entries, it is suggested to use <c>this.GetLocalization("CustomMapEntryName")</c>. Modders can also re-use the display name localization of items, such as <c>ModContent.GetInstance&lt;ItemThatPlacesThisStyle&gt;().DisplayName</c>. 
+	/// <br/><br/> Multiple map entries are suitable for tiles that need a different color or hover text for different tile styles. Vanilla code uses this mostly only for chest and dresser tiles. Map entries will be given a corresponding map option value, counting from 0, according to the order in which they are added. Map option values don't necessarily correspond to tile styles.
+	/// <br/> <see cref="ModBlockType.GetMapOption"/> will be used to choose which map entry is used for a given coordinate.
+	/// <br/><br/> Vanilla map entries for most furniture tiles tend to be fairly generic, opting to use a single map entry to show "Table" for all styles of tables instead of the style-specific text such as "Wooden Table", "Honey Table", etc. To use these existing localizations, use the <see cref="Language.GetText(string)"/> method with the appropriate key, such as "MapObject.Chair", "MapObject.Door", "ItemName.WorkBench", etc. Consult the source code or ExampleMod to find the existing localization keys for common furniture types.
 	/// </summary>
 	public void AddMapEntry(Color color, LocalizedText name = null)
 	{
@@ -62,9 +75,8 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Adds an entry to the minimap for this tile with the given color, default display name, and display name function. The parameters for the function are the default display name, x-coordinate, and y-coordinate. This should be called in SetDefaults.
-	/// <br/> For a typical tile that has a map display name, use <see cref="ModBlockType.CreateMapEntryName"/> as the name parameter for a default key using the pattern "Mods.{ModName}.Tiles.{ContentName}.MapEntry".
-	/// <br/> If a tile will be using multiple map entries, it is suggested to use <c>this.GetLocalization("CustomMapEntryName")</c>.
+	/// <inheritdoc cref="AddMapEntry(Color, LocalizedText)"/>
+	/// <br/><br/> <b>Overload specific:</b> This overload has an additional <paramref name="nameFunc"/> parameter. This function will be used to dynamically adjust the hover text. The parameters for the function are the default display name, x-coordinate, and y-coordinate. This function is most typically used for chests and dressers to show the current chest name, if assigned, instead of the default chest name. <see href="https://github.com/tModLoader/tModLoader/blob/1.4.4/ExampleMod/Content/Tiles/Furniture/ExampleChest.cs">ExampleMod's ExampleChest</see> is one example of this functionality.
 	/// </summary>
 	public void AddMapEntry(Color color, LocalizedText name, Func<string, int, int, string> nameFunc)
 	{
@@ -74,6 +86,26 @@ public abstract class ModTile : ModBlockType
 				MapLoader.tileEntries[Type] = new List<MapEntry>();
 			}
 			MapLoader.tileEntries[Type].Add(entry);
+		}
+	}
+
+	/// <summary>
+	/// Manually registers an item to drop for the provided tile styles. Use this for tile styles that don't have an item that places them. For example, open door tiles don't have any item that places them, but they should drop an item when destroyed. A tile style with no registered drop and no fallback drop will not drop anything when destroyed.<br/><br/>
+	/// This method can also be used to register the fallback item drop. The fallback item will drop for any tile with a style that does not have a manual or automatic item drop.<br/>
+	/// To register the fallback item, omit the tileStyles parameter.<br/><br/>
+	/// If a mod removes content, manually specifying a replacement/fallback item allows users to recover something from the tile.<br/>
+	/// If more control over tile item drops is required, such as conditional drops, custom data on dropped items, or multiple item drops, use <see cref="GetItemDrops(int, int)"/>.<br/>
+	/// </summary>
+	/// <param name="itemType"></param>
+	/// <param name="tileStyles"></param>
+	public void RegisterItemDrop(int itemType, params int[] tileStyles) {
+		// Runs before TileLoader.FinishSetup
+		if (tileStyles == null || tileStyles.Length == 0) {
+			TileLoader.tileTypeAndTileStyleToItemType[(Type, -1)] = itemType;
+			return;
+		}
+		foreach (var tileStyle in tileStyles) {
+			TileLoader.tileTypeAndTileStyleToItemType[(Type, tileStyle)] = itemType;
 		}
 	}
 
@@ -180,7 +212,7 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Allows prevention of item drops from the tile dropping at the given coordinates. Return false to stop the game from dropping the tile's default item. Returns true by default. See <see cref="GetItemDrops"/> to customize the item drop.
+	/// Allows prevention of item drops from the tile dropping at the given coordinates. Return false to stop the game from dropping the tile's item(s). Returns true by default. See <see cref="GetItemDrops"/> to customize the item drop.
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -190,14 +222,13 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Allows you to customize the items the tile at the given coordinates drops.
-	/// <br/> By default, this method will intelligently decide on a single item drop based on <see cref="ModBlockType.ItemDrop"/>, the tile style, and associated <see cref="TileObjectData"/> if it exists.
-	/// <br/> If <see cref="ModBlockType.ItemDrop"/> has a non-zero value, it will be used as the item to drop. If -1, no item will drop.
-	/// <br/> Otherwise, the dropped item will be the item type of the loaded item with <see cref="Item.createTile"/> and <see cref="Item.placeStyle"/> matching the type and style of the Tile. If the specific <see cref="Item.placeStyle"/> is not found, the decision will fall back to a <see cref="Item.placeStyle"/> of 0.
-	/// <br/> Detecting the tile style is only reliable for tiles with an associated <see cref="TileObjectData"/>, so tiles using a manual tile style approach need to override this method. Once the style is calculated from the tile frame data, <c>TileLoader.GetItemDropFromTypeAndStyle(Type, style)</c> can be used to retrieve the associated item drop. 
-	/// <br/> This existing logic should cover 99% of use cases, meaning that overriding this method should only be necessary in extremely unique tiles, such as tiles dropping multiple items, tiles dropping items with custom data, or tiles with custom tile style code.
-	/// <br/> For tiles dropping multiple items, or dropping items that need custom data, override this method. Use <c>yield return new Item(ItemTypeHere);</c> for each spawned item. 
-	/// <br/> Use <see cref="CanDrop"/> to conditionally prevent any item drops. Use <see cref="KillMultiTile(int, int, int, int)"/> or <see cref="KillTile(int, int, ref bool, ref bool, ref bool)"/> for other logic such as cleaning up TileEntities or killing chests or signs.
+	/// Allows customization of the items the tile at the given coordinates drops.<br/><br/>
+	/// The default item drop is determined by finding an item with <see cref="Item.createTile"/> and <see cref="Item.placeStyle"/> matching the type and style of this tile. 
+	/// <see cref="ModTile.RegisterItemDrop(int, int[])"/> can be used to manually register item drops for tile styles with no corresponding item. It can also be used to register a fallback item, which will be dropped if no suitable item is found.<br/><br/>
+	/// The default behavior should cover 99% of use cases, meaning that overriding this method should only be necessary in extremely unique tiles, such as tiles dropping multiple items, tiles dropping items with custom data, or tiles with custom tile style code.<br/><br/>
+	/// When overriding, use <c>yield return new Item(ItemTypeHere);</c> for each spawned item. Note that a random prefix will be applied to these items, if applicable, so if specific prefixes or no prefix is needed for an item drop, it will have to be spawned in manually using <see cref="KillMultiTile(int, int, int, int)"/> or <see cref="KillTile(int, int, ref bool, ref bool, ref bool)"/>.<br/><br/>
+	/// The style based drop logic is based on <see cref="TileObjectData"/>. If a tile has custom 'styles' but still wants to make use of <see cref="ModTile.RegisterItemDrop(int, int[])"/>, <c>TileLoader.GetItemDropFromTypeAndStyle(Type, style)</c> can be used to retrieve the associated item drop.<br/><br/>
+	/// Use <see cref="CanDrop"/> to conditionally prevent any item drops. Use <see cref="KillMultiTile(int, int, int, int)"/> or <see cref="KillTile(int, int, ref bool, ref bool, ref bool)"/> for other logic such as cleaning up TileEntities or killing chests or signs.<br/>
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -234,13 +265,14 @@ public abstract class ModTile : ModBlockType
 	/// <param name="j">The y position in tile coordinates.</param>
 	/// <param name="fail">If true, the tile won't be mined</param>
 	/// <param name="effectOnly">If true, only the dust visuals will happen</param>
-	/// <param name="noItem">If true, the corrsponding item won't drop</param>
+	/// <param name="noItem">If true, the corresponding item won't drop</param>
 	public virtual void KillTile(int i, int j, ref bool fail, ref bool effectOnly, ref bool noItem)
 	{
 	}
 
 	/// <summary>
 	/// This hook is called exactly once whenever a block encompassing multiple tiles is destroyed. Use this to clean up extra data such as Chests, Signs, or TileEntities. For tiles that are 1x1, use <see cref="KillTile(int, int, ref bool, ref bool, ref bool)"/>.
+	/// <para/> The <paramref name="i"/> and <paramref name="j"/> coordinates will be the top left tile of a multi-tile.
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -281,6 +313,19 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
+	/// Allows you to determine whether this tile glows <paramref name="sightColor"/> while the local player has the <see href="https://terraria.wiki.gg/wiki/Biome_Sight_Potion">Biome Sight buff</see>.
+	/// <br/>Return true and assign to <paramref name="sightColor"/> to allow this tile to glow.
+	/// <br/>This is only called on the local client.
+	/// </summary>
+	/// <param name="i">The x position in tile coordinates.</param>
+	/// <param name="j">The y position in tile coordinates.</param>
+	/// <param name="sightColor">The color this tile should glow with, which defaults to <see cref="Color.White"/>.</param>
+	public virtual bool IsTileBiomeSightable(int i, int j, ref Color sightColor)
+	{
+		return false;
+	}
+
+	/// <summary>
 	/// Allows you to customize whether this tile can glow yellow while having the Spelunker buff, and is also detected by various pets.
 	/// <br/>This is only called if Main.tileSpelunker[type] is false.
 	/// </summary>
@@ -293,6 +338,7 @@ public abstract class ModTile : ModBlockType
 
 	/// <summary>
 	/// Allows you to determine whether or not the tile will draw itself flipped in the world.
+	/// <para/> If flipping, consider setting <see cref="TileObjectData.DrawFlipHorizontal"/> or <see cref="TileObjectData.DrawFlipVertical"/> as well to ensure that the tile placement preview is also flipped.
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -304,7 +350,7 @@ public abstract class ModTile : ModBlockType
 	/// <summary>
 	/// Allows you to customize the position in which this tile is drawn. Width refers to the width of one frame of the tile, offsetY refers to how many pixels below its actual position the tile should be drawn, height refers to the height of one frame of the tile.
 	/// <para> By default the values will be set to the values you give this tile's TileObjectData. If this tile has no TileObjectData then they will default to 16, 0, and 16, respectively.</para>
-	/// <para> tileFrameX and tileFrameY allow you to change which frames are drawn, keeping tile.frameX/Y intact for other purposes.</para>
+	/// <para> tileFrameX and tileFrameY allow you to change which frames are drawn, keeping tile.TileFrameX/Y intact for other purposes.</para>
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -318,25 +364,30 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Allows you to animate your tile. Use frameCounter to keep track of how long the current frame has been active, and use frame to change the current frame. This is called once an update. Use AnimateIndividualTile to animate specific tile instances directly.
-	/// </summary>
-	/// <example><code>if (++frameCounter > 8)
-	///{
+	/// Allows you to animate your tile. Use frameCounter to keep track of how long the current frame has been active, and use frame to change the current frame. This is called once an update.
+	/// <para/> <see cref="AnimationFrameHeight"/> must be set for the animation timing set in this method to actually apply to the tile drawing. Use <see cref="AnimateIndividualTile(int, int, int, ref int, ref int)"/> to animate specific tile instances directly.
+	/// <example><code>// Cycle 5 frames of animation spending 8 ticks on each
+	///if (++frameCounter >= 8) {
 	///	frameCounter = 0;
-	///	if (++frame > 5)
-	///	{
+	///	if (++frame >= 5) {
 	///		frame = 0;
 	///	}
 	///}</code>
+	/// or, more compactly:
+	/// <code>if (++frameCounter >= 8) {
+	/// 	frameCounter = 0;
+	/// 	frame = ++frame % 5;
+	///}</code>
 	///	or, to mimic another tile, simply:
 	///	<code>frame = Main.tileFrame[TileID.FireflyinaBottle];</code></example>
+	/// </summary>
 	public virtual void AnimateTile(ref int frame, ref int frameCounter)
 	{
 	}
 
 	/// <summary>
-	/// Animates an individual tile. i and j are the coordinates of the Tile in question. frameXOffset and frameYOffset should be used to specify an offset from the tiles frameX and frameY. "frameYOffset = modTile.animationFrameHeight * Main.tileFrame[type];" will already be set before this hook is called, taking into account the TileID-wide animation set via AnimateTile.
-	/// Use this hook for off-sync animations (lightning bug in a bottle), temporary animations (trap chests), or TileEntities to achieve unique animation behaviors without having to manually draw the tile via PreDraw.
+	/// Animates an individual tile. <paramref name="i"/> and <paramref name="j"/> are the coordinates of the Tile in question. <paramref name="frameXOffset"/> and <paramref name="frameYOffset"/> should be used to specify an offset from the tiles <see cref="Tile.TileFrameX"/> and <see cref="Tile.TileFrameY"/>. <c>frameYOffset = modTile.AnimationFrameHeight * Main.tileFrame[type];</c> will already be set before this hook is called, taking into account the TileID-wide animation set via <see cref="AnimateTile(ref int, ref int)"/>.
+	/// <para/> Use this hook for off-sync animations (lightning bug in a bottle), state specific animations (campfires), temporary animations (trap chests), or TileEntities to achieve unique animation behaviors without having to manually draw the tile via <see cref="ModBlockType.PreDraw(int, int, SpriteBatch)"/>.
 	/// </summary>
 	/// <param name="type">The tile type.</param>
 	/// <param name="i">The x position in tile coordinates.</param>
@@ -360,7 +411,7 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Special Draw. Only called if coordinates are added using Main.instance.TilesRenderer.AddSpecialLegacyPoint during DrawEffects. Useful for drawing things that would otherwise be impossible to draw due to draw order, such as items in item frames.
+	/// Special Draw. Only called if coordinates are added using <c>Main.instance.TilesRenderer.AddSpecialLegacyPoint</c> during <see cref="DrawEffects(int, int, SpriteBatch, ref TileDrawInfo)"/>. Useful for drawing things that would otherwise be impossible to draw due to draw order, such as items in item frames.
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
@@ -382,11 +433,48 @@ public abstract class ModTile : ModBlockType
 	}
 
 	/// <summary>
-	/// Allows you to make something happen when this tile is right-clicked by the player. Return true to indicate that a tile interaction has occurred, preventing other right click actions like minion targetting from happening. Returns false by default.
+	/// Allows you to modify the frame of a tile after the vanilla framing code has set <see cref="Tile.TileFrameX"/> and <see cref="Tile.TileFrameY"/>. Useful for offsetting the final frame position without entirely overriding the vanilla framing logic
+	/// <br/> Only called if <see cref="TileFrame(int, int, ref bool, ref bool)"/> returns true
 	/// </summary>
 	/// <param name="i">The x position in tile coordinates.</param>
 	/// <param name="j">The y position in tile coordinates.</param>
-	/// <returns>Return true to indicate that a tile interaction has occurred, preventing other right click actions like minion targetting from happening. Returns false by default.</returns>
+	/// <param name="up">The merge type of the tile above. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="down">The merge type of the tile below. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="left">The merge type of the tile to the left. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="right">The merge type of the tile to the right. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="upLeft">The merge type of the tile on the top left. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="upRight">The merge type of the tile on the top right. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="downLeft">The merge type of the tile on the bottom left. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	/// <param name="downRight">The merge type of the tile on the bottom right. Unitializaed if the tile is <see cref="Main.tileFrameImportant"/>.</param>
+	public virtual void PostTileFrame(int i, int j, int up, int down, int left, int right, int upLeft, int upRight, int downLeft, int downRight)
+	{
+	}
+
+	/// <summary>
+	/// Allows you to change the merge type of the adjacent tiles before <see cref="Tile.TileFrameX"/> and <see cref="Tile.TileFrameY"/> is picked by vanilla framing code. Useful to make tiles that only selectively connect with others, or for tiles
+	/// <br/> Tiles can be easily made to use custom merge frames with non-dirt tiles by using <see cref="TileID.Sets.ChecksForMerge"/> in combination with <see cref="WorldGen.TileMergeAttempt(int, bool[], ref int, ref int, ref int, ref int, ref int, ref int, ref int, ref int)"/> to set the adjacent tile's merge type to -2
+	/// <br/> Only called if <see cref="TileFrame(int, int, ref bool, ref bool)"/> returns true
+	/// </summary>
+	/// <param name="i">The x position in tile coordinates.</param>
+	/// <param name="j">The y position in tile coordinates.</param>
+	/// <param name="up">The merge type of the tile above. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="down">The merge type of the tile below. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="left">The merge type of the tile to the keft. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="right">The merge type of the tile to the right. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="upLeft">The merge type of the tile on the top left. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="upRight">The merge type of the tile on the top right. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="downLeft">The merge type of the tile on the bottom left. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	/// <param name="downRight">The merge type of the tile on the bottom right. The tile will merge with it if the value is the same as its tile type <br/>-1 Means it'll consider the tile empty, and -2 means tiles that use <see cref="Main.tileMergeDirt"/> or <see cref="TileID.Sets.ChecksForMerge"/> will attempt to use their custom merge frames with that tile</param>
+	public virtual void ModifyFrameMerge(int i, int j, ref int up, ref int down, ref int left, ref int right, ref int upLeft, ref int upRight, ref int downLeft, ref int downRight)
+	{
+	}
+
+	/// <summary>
+	/// Allows you to make something happen when this tile is right-clicked by the player. Return true to indicate that a tile interaction has occurred, preventing other right click actions like minion targeting from happening. Returns false by default.
+	/// </summary>
+	/// <param name="i">The x position in tile coordinates.</param>
+	/// <param name="j">The y position in tile coordinates.</param>
+	/// <returns>Return true to indicate that a tile interaction has occurred, preventing other right click actions like minion targeting from happening. Returns false by default.</returns>
 	public virtual bool RightClick(int i, int j)
 	{
 		return false;
@@ -451,6 +539,7 @@ public abstract class ModTile : ModBlockType
 
 	/// <summary>
 	/// Whether or not this tile creates dust when the player walks on it. Returns false by default.
+	/// <para/> Customize the dust spawned using <see cref="WalkDust(ref int, ref bool, ref Color)"/>. The default dust is <see cref="DustID.Snow"/> otherwise.
 	/// </summary>
 	public virtual bool HasWalkDust()
 	{
@@ -459,6 +548,7 @@ public abstract class ModTile : ModBlockType
 
 	/// <summary>
 	/// Allows you to modify the dust created when the player walks on this tile. The makeDust parameter is whether or not to make dust; you can randomly set this to false to reduce the amount of dust produced.
+	/// <para/> The default dust (<paramref name="dustType"/>) is <see cref="DustID.Snow"/> 
 	/// </summary>
 	/// <param name="dustType"></param>
 	/// <param name="makeDust"></param>
@@ -520,7 +610,7 @@ public abstract class ModTile : ModBlockType
 	/// <summary>
 	/// Returns the default name for a chest or dresser with the provided FrameX and FrameY values. <br/>
 	/// A typical implementation of a tile with only a single name might return <c>CreateMapEntryName()</c> <br/>
-	/// A container with multiple styles might return <c>this.GetLocalization("MapEntry" + option)</c> where option is determined using similar logic to <see cref="ModBlockType.GetMapOption"/> to match the <see cref="AddMapEntry(Color, LocalizedText)"/> entries.
+	/// A container with multiple styles might return <c>this.GetLocalization("MapEntry" + option)</c> where option is determined using similar logic to <see cref="ModBlockType.GetMapOption"/> to match the <see cref="AddMapEntry(Color, LocalizedText)"/> entries. Another option is using <c>return Lang._mapLegendCache[MapHelper.TileToLookup(Type, option)];</c>, this will reuse the localizations used for the map entries.
 	/// </summary>
 	public virtual LocalizedText DefaultContainerName(int frameX, int frameY)
 	{

@@ -151,6 +151,7 @@ public abstract class ModCactus : IPlant
 	public int[] GrowsOnTileId { get; set; }
 	public abstract void SetStaticDefaults();
 	public abstract Asset<Texture2D> GetTexture();
+	/// <summary> The fruit texture has a special layout that needs to be followed, see ExampleCactus_Fruit.png in ExampleMod for a template. </summary>
 	public abstract Asset<Texture2D> GetFruitTexture();
 }
 
@@ -200,7 +201,8 @@ public abstract class ModTree : ITree
 	}
 
 	/// <summary>
-	/// Executed on tree shake, return false to skip vanilla tree shake drops
+	/// Executed on tree shake, return false to skip vanilla tree shake drops.<br/>
+	/// The x and y coordinates correspond to the top of the tree, where items usually spawn.
 	/// </summary>
 	/// <returns></returns>
 	public virtual bool Shake(int x, int y, ref bool createLeaves)

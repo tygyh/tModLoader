@@ -18,8 +18,9 @@ using Terraria.Utilities;
 namespace Terraria.ModLoader;
 
 /// <summary>
-/// This class serves as a place for you to place all your properties and hooks for each item. Create instances of ModItem (preferably overriding this class) to pass as parameters to Mod.AddItem.<br/>
-/// The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Item">Basic Item Guide</see> teaches the basics of making a modded item.
+/// This class serves as a place for you to place all your properties and hooks for each item.
+/// <br/> To use it, simply create a new class deriving from this one. Implementations will be registered automatically.
+/// <para/> The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Item">Basic Item Guide</see> teaches the basics of making a modded item.
 /// </summary>
 public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 {
@@ -29,11 +30,11 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	public Item Item => Entity;
 
 	/// <summary>
-	/// Shorthand for Item.type;
+	/// Shorthand for <c>Item.type</c>.
 	/// </summary>
 	public int Type => Item.type;
 
-	public string LocalizationCategory => "Items";
+	public virtual string LocalizationCategory => "Items";
 
 	/// <summary>
 	/// The translations for the display name of this item.
@@ -102,6 +103,10 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	{
 	}
 
+	/// <summary>
+	/// Called when this item is created. The <paramref name="context"/> parameter indicates the context of the item creation and can be used in logic for the desired effect.
+	/// <para/> Known <see cref="ItemCreationContext"/> include: <see cref="InitializationItemCreationContext"/>, <see cref="BuyItemCreationContext"/>, <see cref="JourneyDuplicationItemCreationContext"/>, and <see cref="RecipeItemCreationContext"/>. Some of these provide additional context such as how <see cref="RecipeItemCreationContext"/> includes the items consumed to craft this created item.
+	/// </summary>
 	public virtual void OnCreated(ItemCreationContext context)
 	{
 	}
@@ -136,31 +141,27 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to change whether or not a weapon receives melee prefixes. Return true if the item should receive melee prefixes and false if it should not.
-	/// Takes priority over WeaponPrefix, RangedPrefix, and MagicPrefix
 	/// </summary>
 	public virtual bool MeleePrefix()
-		=> Item.melee && !Item.noUseGraphic;
+		=> Item.DamageType.GetsPrefixesFor(DamageClass.Melee) && !Item.noUseGraphic;
 
 	/// <summary>
-	/// Allows you to change whether or not a weapon only receives generic prefixes. Return true if the item should only receive generic prefixes and false if it should not.
-	/// Takes priority over RangedPrefix and MagicPrefix
-	/// Ignored if MeleePrefix returns true
+	/// Allows you to change whether or not a weapon receives generic prefixes. Return true if the item should receive generic prefixes and false if it should only receive them from another category.
 	/// </summary>
 	public virtual bool WeaponPrefix()
-		=> Item.melee && Item.noUseGraphic;
+		=> Item.DamageType.GetsPrefixesFor(DamageClass.Melee) && Item.noUseGraphic;
 
 	/// <summary>
 	/// Allows you to change whether or not a weapon receives ranged prefixes. Return true if the item should receive ranged prefixes and false if it should not.
-	/// Takes priority over MagicPrefix
 	/// </summary>
 	public virtual bool RangedPrefix()
-		=> Item.ranged || Item.CountsAsClass(DamageClass.Throwing);
+		=> Item.DamageType.GetsPrefixesFor(DamageClass.Ranged);
 
 	/// <summary>
 	/// Allows you to change whether or not a weapon receives magic prefixes. Return true if the item should receive magic prefixes and false if it should not.
 	/// </summary>
 	public virtual bool MagicPrefix()
-		=> Item.magic || Item.summon;
+		=> Item.DamageType.GetsPrefixesFor(DamageClass.Magic);
 
 	/// <summary>
 	/// To prevent putting the item in the tinkerer slot, return false when pre is -3.
@@ -244,7 +245,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	public virtual float UseSpeedMultiplier(Player player) => 1f;
 
 	/// <summary>
-	/// Allows you to temporarily modify the amount of life a life healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a healLife value.
+	/// Allows you to temporarily modify the amount of life a life healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a <see cref="Item.healLife"/> value.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="quickHeal">Whether the item is being used through quick heal or not.</param>
@@ -254,7 +255,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	}
 
 	/// <summary>
-	/// Allows you to temporarily modify the amount of mana a mana healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a healMana value.
+	/// Allows you to temporarily modify the amount of mana a mana healing item will heal for, based on player buffs, accessories, etc. This is only called for items with a <see cref="Item.healMana"/> value.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="quickHeal">Whether the item is being used through quick heal or not.</param>
@@ -265,6 +266,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to temporarily modify the amount of mana this item will consume on use, based on player buffs, accessories, etc. This is only called for items with a mana value.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.mana"/>, modify the <paramref name="reduce"/> and <paramref name="mult"/> parameters.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="reduce">Used for decreasingly stacking buffs (most common). Only ever use -= on this field.</param>
@@ -296,6 +298,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's damage based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.damage"/>, modify the <paramref name="damage"/> parameter.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="damage">The StatModifier object representing the totality of the various modifiers to be applied to the item's base damage.</param>
@@ -305,6 +308,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to set an item's sorting group in Journey Mode's duplication menu. This is useful for setting custom item types that group well together, or whenever the default vanilla sorting doesn't sort the way you want it.
+	/// <para/> Note that this affects the order of the item in the listing, not which filters the item satisfies.
 	/// </summary>
 	/// <param name="itemGroup">The item group this item is being assigned to</param>
 	public virtual void ModifyResearchSorting(ref ContentSamples.CreativeHelper.ItemGroup itemGroup)
@@ -312,7 +316,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	}
 
 	/// <summary>
-	/// Choose if this item will be consumed or not when used as bait. return null for vanilla behaviour.
+	/// Choose if this item will be consumed or not when used as bait. return null for vanilla behavior.
 	/// </summary>
 	/// <param name="player">The Player that owns the bait</param>
 	public virtual bool? CanConsumeBait(Player player)
@@ -321,7 +325,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	}
 
 	/// <summary>
-	/// Allows you to prevent an item from being researched by returning false. True is the default behaviour.
+	/// Allows you to prevent an item from being researched by returning false. True is the default behavior.
 	/// </summary>
 	public virtual bool CanResearch()
 	{
@@ -329,7 +333,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	}
 
 	/// <summary>
-	/// Allows you to create custom behaviour when an item is accepted by the Research function
+	/// Allows you to create custom behavior when an item is accepted by the Research function
 	/// </summary>
 	/// <param name="fullyResearched">True if the item was completely researched, and is ready to be duplicated, false if only partially researched.</param>
 	public virtual void OnResearched(bool fullyResearched)
@@ -339,6 +343,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's knockback based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.knockBack"/>, modify the <paramref name="knockback"/> parameter.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="knockback">The StatModifier object representing the totality of the various modifiers to be applied to the item's base knockback.</param>
@@ -349,6 +354,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	/// <summary>
 	/// Allows you to dynamically modify a weapon's crit chance based on player and item conditions.
 	/// Can be utilized to modify damage beyond the tools that DamageClass has to offer.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.crit"/>, modify the <paramref name="crit"/> parameter.
 	/// </summary>
 	/// <param name="player">The player using the item.</param>
 	/// <param name="crit">The total crit chance of the item after all normal crit chance calculations.</param>
@@ -543,6 +549,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to dynamically modify this item's size for the given player, similarly to the effect of the Titan Glove.
+	/// <br/><br/> <b>Do not</b> modify <see cref="Item.scale"/>, modify the <paramref name="scale"/> parameter.
 	/// </summary>
 	/// <param name="player">The player wielding this item.</param>
 	/// <param name="scale">
@@ -813,17 +820,17 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to determine special visual effects this vanity set has on the player without having to code them yourself. Note that this hook is only ever called through this item's associated equipment texture. Use the player.armorEffectDraw bools to activate the desired effects.
-	/// </summary>
 	/// <example><code>player.armorEffectDrawShadow = true;</code></example>
+	/// </summary>
 	/// <param name="player">The player.</param>
 	public virtual void ArmorSetShadows(Player player)
 	{
 	}
 
 	/// <summary>
-	/// Allows you to modify the equipment that the player appears to be wearing. This hook will only be called for body armor and leg armor. Note that equipSlot is not the same as the item type of the armor the player will appear to be wearing. Worn equipment has a separate set of IDs. You can find the vanilla equipment IDs by looking at the headSlot, bodySlot, and legSlot fields for items, and modded equipment IDs by looking at EquipLoader.
-	/// If this hook is called on body armor, equipSlot allows you to modify the leg armor the player appears to be wearing. If you modify it, make sure to set robes to true. If this hook is called on leg armor, equipSlot allows you to modify the leg armor the player appears to be wearing, and the robes parameter is useless.
-	/// Note that this hook is only ever called through this item's associated equipment texture.
+	/// Allows you to modify the equipment that the player appears to be wearing. This is most commonly used to add legs to robes and for swapping to female variant textures if <paramref name="male"/> is false for head and leg armor. This hook will only be called for head armor, body armor, and leg armor. Note that equipSlot is not the same as the item type of the armor the player will appear to be wearing. Worn equipment has a separate set of IDs. You can find the vanilla equipment IDs by looking at the headSlot, bodySlot, and legSlot fields for items, and modded equipment IDs by looking at EquipLoader.
+	/// <para/> If this hook is called on body armor, equipSlot allows you to modify the leg armor the player appears to be wearing. If you modify it, make sure to set robes to true. If this hook is called on leg armor, equipSlot allows you to modify the leg armor the player appears to be wearing, and the robes parameter is useless. The same is true for head armor.
+	/// <para/> Note that this hook is only ever called through this item's associated equipment texture.
 	/// </summary>
 	/// <param name="male">if set to <c>true</c> [male].</param>
 	/// <param name="equipSlot">The equip slot.</param>
@@ -841,7 +848,8 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	}
 
 	/// <summary>
-	/// Allows you to make things happen when this item is right-clicked in the inventory.
+	/// Allows you to make things happen when this item is right-clicked in the inventory. By default this will consume the item by 1 stack, so return false in <see cref="ConsumeItem(Player)"/> if that behavior is undesired.
+	/// <para/> This is only called if the item can be right-clicked, meaning <see cref="ItemID.Sets.OpenableBag"/> is true for the item type or either <see cref="ModItem.CanRightClick"/> or <see cref="GlobalItem.CanRightClick"/> return true.
 	/// </summary>
 	/// <param name="player">The player.</param>
 	public virtual void RightClick(Player player)
@@ -850,7 +858,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// Allows you to add and modify the loot items that spawn from bag items when opened.
-	/// The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-NPC-Drops-and-Loot-1.4">Basic NPC Drops and Loot 1.4 Guide</see> explains how to use the <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> hook to modify NPC loot as well as this hook. A common usage is to use this hook and <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> to edit non-expert exlclusive drops for bosses.
+	/// The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-NPC-Drops-and-Loot-1.4">Basic NPC Drops and Loot 1.4 Guide</see> explains how to use the <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> hook to modify NPC loot as well as this hook. A common usage is to use this hook and <see cref="ModNPC.ModifyNPCLoot(NPCLoot)"/> to edit non-expert exclusive drops for bosses.
 	/// <br/> This hook only runs once during mod loading, any dynamic behavior must be contained in the rules themselves.
 	/// </summary>
 	/// <param name="itemLoot">A reference to the item drop database for this item type</param>
@@ -887,7 +895,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	/// This hook is called on item being stacked onto from <paramref name="source"/> and before the items are transferred
 	/// </summary>
 	/// <param name="source">The item instance being stacked onto this item</param>
-	/// <param name="numToTransfer">The quanity of <paramref name="source"/> that will be transferred to this item</param>
+	/// <param name="numToTransfer">The quantity of <paramref name="source"/> that will be transferred to this item</param>
 	public virtual void OnStack(Item source, int numToTransfer)
 	{
 	}
@@ -897,7 +905,7 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 	/// This item is the item clone being stacked onto from <paramref name="source"/> and always has a stack of zero.
 	/// </summary>
 	/// <param name="source">The original item that will have it's stack reduced.</param>
-	/// <param name="numToTransfer">The quanity of <paramref name="source"/> that will be transferred to this item</param>
+	/// <param name="numToTransfer">The quantity of <paramref name="source"/> that will be transferred to this item</param>
 	public virtual void SplitStack(Item source, int numToTransfer)
 	{
 	}
@@ -914,12 +922,19 @@ public abstract class ModItem : ModType<Item, ModItem>, ILocalizedModType
 
 	/// <summary>
 	/// This hook gets called when the player clicks on the reforge button and can afford the reforge.
-	/// Returns whether the reforge will take place. If false is returned, the PostReforge hook is never called.
+	/// Returns whether the reforge will take place. If false is returned by this or any GlobalItem, the item will not be reforged, the cost to reforge will not be paid, and PreRefoge and PostReforge hooks will not be called.
 	/// Reforging preserves modded data on the item.
 	/// </summary>
-	public virtual bool PreReforge()
+	public virtual bool CanReforge()
 	{
 		return true;
+	}
+
+	/// <summary>
+	/// This hook gets called immediately before an item gets reforged by the Goblin Tinkerer.
+	/// </summary>
+	public virtual void PreReforge()
+	{
 	}
 
 	/// <summary>
@@ -1063,14 +1078,21 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to draw things behind this item, or to modify the way this item is drawn in the world. Return false to stop the game from drawing the item (useful if you're manually drawing the item). Returns true by default.
+	/// Allows you to draw things behind this item, or to modify the way this item is drawn in the world. Return false to stop the game from drawing the item (useful if you're manually drawing the item).
+	/// <para/> Note that items in the world are drawn centered horizontally sitting at the bottom of the item hitbox, not in the center of the hitbox. To replicate the normal drawing calculations, use the following and then use <see cref="SpriteBatch.DrawString(SpriteFont, string, Vector2, Color, float, Vector2, float, SpriteEffects, float)"/>:
+	/// <code>
+	/// Main.GetItemDrawFrame(Item.type, out var itemTexture, out var itemFrame);
+	/// Vector2 drawOrigin = itemFrame.Size() / 2f;
+	/// Vector2 drawPosition = Item.Bottom - Main.screenPosition - new Vector2(0, drawOrigin.Y);
+	/// </code>
+	/// <para/> Returns true by default.
 	/// </summary>
 	/// <param name="spriteBatch">The sprite batch.</param>
 	/// <param name="lightColor">Color of the light.</param>
 	/// <param name="alphaColor">Color of the alpha.</param>
-	/// <param name="rotation">The rotation.</param>
-	/// <param name="scale">The scale.</param>
-	/// <param name="whoAmI">The who am i.</param>
+	/// <param name="rotation">The item rotation. Items rotate slightly as they are thrown.</param>
+	/// <param name="scale">The draw scale. Items are usually drawn in the world at a scale of 1f but some effects like pulsing Soul items change this.</param>
+	/// <param name="whoAmI">The <see cref="Entity.whoAmI"/>.</param>
 	/// <returns></returns>
 	public virtual bool PreDrawInWorld(SpriteBatch spriteBatch, Color lightColor, Color alphaColor, ref float rotation, ref float scale, int whoAmI)
 	{
@@ -1079,27 +1101,35 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 
 	/// <summary>
 	/// Allows you to draw things in front of this item. This method is called even if PreDrawInWorld returns false.
+	/// <para/> Note that items in the world are drawn centered horizontally sitting at the bottom of the item hitbox, not in the center of the hitbox. To replicate the normal drawing calculations, use the following and then use <see cref="SpriteBatch.DrawString(SpriteFont, string, Vector2, Color, float, Vector2, float, SpriteEffects, float)"/>:
+	/// <code>
+	/// Main.GetItemDrawFrame(Item.type, out var itemTexture, out var itemFrame);
+	/// Vector2 drawOrigin = itemFrame.Size() / 2f;
+	/// Vector2 drawPosition = Item.Bottom - Main.screenPosition - new Vector2(0, drawOrigin.Y);
+	/// </code>
 	/// </summary>
 	/// <param name="spriteBatch">The sprite batch.</param>
 	/// <param name="lightColor">Color of the light.</param>
 	/// <param name="alphaColor">Color of the alpha.</param>
-	/// <param name="rotation">The rotation.</param>
-	/// <param name="scale">The scale.</param>
-	/// <param name="whoAmI">The who am i.</param>
+	/// <param name="rotation">The item rotation. Items rotate slightly as they are thrown.</param>
+	/// <param name="scale">The draw scale. Items are usually drawn in the world at a scale of 1f but some effects like pulsing Soul items change this.</param>
+	/// <param name="whoAmI">The <see cref="Entity.whoAmI"/>.</param>
 	public virtual void PostDrawInWorld(SpriteBatch spriteBatch, Color lightColor, Color alphaColor, float rotation, float scale, int whoAmI)
 	{
 	}
 
 	/// <summary>
-	/// Allows you to draw things behind this item in the inventory. Return false to stop the game from drawing the item (useful if you're manually drawing the item). Returns true by default.
+	/// Allows you to draw things behind this item in the inventory. Return false to stop the game from drawing the item (useful if you're manually drawing the item).
+	/// <para/> Note that <paramref name="position"/> is the center of the inventory slot and <paramref name="origin"/> is the center of the texture <paramref name="frame"/> to be drawn, so the provided parameters can be passed into <see cref="SpriteBatch.DrawString(SpriteFont, string, Vector2, Color, float, Vector2, float, SpriteEffects, float)"/> to draw a texture in the typical manner.
+	/// <para/> Returns true by default.
 	/// </summary>
 	/// <param name="spriteBatch">The sprite batch.</param>
-	/// <param name="position">The position.</param>
-	/// <param name="frame">The frame.</param>
+	/// <param name="position">The screen position of the center of the inventory slot.</param>
+	/// <param name="frame">The frame of the item texture to be drawn.</param>
 	/// <param name="drawColor">Color of the draw.</param>
 	/// <param name="itemColor">Color of the item.</param>
-	/// <param name="origin">The origin.</param>
-	/// <param name="scale">The scale.</param>
+	/// <param name="origin">The draw origin, the center of the frame to be drawn.</param>
+	/// <param name="scale">The scale the item has been calculated to draw in to fit in the inventory slot.</param>
 	/// <returns></returns>
 	public virtual bool PreDrawInInventory(SpriteBatch spriteBatch, Vector2 position, Rectangle frame, Color drawColor,
 		Color itemColor, Vector2 origin, float scale)
@@ -1109,14 +1139,15 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 
 	/// <summary>
 	/// Allows you to draw things in front of this item in the inventory. This method is called even if PreDrawInInventory returns false.
+	/// <para/> Note that <paramref name="position"/> is the center of the inventory slot and <paramref name="origin"/> is the center of the texture <paramref name="frame"/> to be drawn, so the provided parameters can be passed into <see cref="SpriteBatch.DrawString(SpriteFont, string, Vector2, Color, float, Vector2, float, SpriteEffects, float)"/> to draw a texture in the typical manner.
 	/// </summary>
 	/// <param name="spriteBatch">The sprite batch.</param>
-	/// <param name="position">The position.</param>
-	/// <param name="frame">The frame.</param>
+	/// <param name="position">The screen position of the center of the inventory slot.</param>
+	/// <param name="frame">The frame of the item texture to be drawn.</param>
 	/// <param name="drawColor">Color of the draw.</param>
 	/// <param name="itemColor">Color of the item.</param>
-	/// <param name="origin">The origin.</param>
-	/// <param name="scale">The scale.</param>
+	/// <param name="origin">The draw origin, the center of the frame to be drawn.</param>
+	/// <param name="scale">The scale of the item drawing to to fit in the inventory slot.</param>
 	public virtual void PostDrawInInventory(SpriteBatch spriteBatch, Vector2 position, Rectangle frame, Color drawColor,
 		Color itemColor, Vector2 origin, float scale)
 	{
@@ -1141,7 +1172,9 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to disallow the player from equipping this accessory. Return false to disallow equipping this accessory. Returns true by default.
+	/// Allows you to disallow the player from equipping this accessory. Return false to disallow equipping this accessory.
+	/// <para/> Do not use this to check for mutually exclusive accessories being equipped, that check is only possible via <see cref="CanAccessoryBeEquippedWith(Item, Item, Player)"/>
+	/// <para/> Returns <see langword="true"/> by default.
 	/// </summary>
 	/// <param name="player">The player.</param>
 	/// <param name="slot">The inventory slot that the item is attempting to occupy.</param>
@@ -1154,6 +1187,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	/// <summary>
 	/// Allows you to prevent similar accessories from being equipped multiple times. For example, vanilla Wings.
 	/// Return false to have the currently equipped item swapped with the incoming item - ie both can't be equipped at same time.
+	/// <para/> This method exists because manually checking <see cref="Player.armor"/> in <see cref="CanEquipAccessory(Player, int, bool)"/> will not correctly account for modded accessory slots.
 	/// </summary>
 	public virtual bool CanAccessoryBeEquippedWith(Item equippedItem, Item incomingItem, Player player)
 	{
@@ -1161,13 +1195,12 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to modify what item, and in what quantity, is obtained when any item belonging to the extractinator type corresponding to this item is fed into the Extractinator.
-	/// <br/> This method is only called if <c>ItemID.Sets.ExtractinatorMode[Item.type] = Item.type;</c> in used in SetStaticDefaults. Other items belonging to the same extractinator group should use <c>ItemID.Sets.ExtractinatorMode[Item.type] = ModContent.ItemType&lt;IconicItemForThisExtractinatorType&gt;();</c> to indicate that they share the same extractinator output pool and to avoid code duplication.
-	/// <br/> By default the parameters will be set to the output of feeding Silt/Slush into the Extractinator.
-	/// <br/> Use <paramref name="extractinatorBlockType"/> to provide different behavior for <see cref="TileID.ChlorophyteExtractinator"/> if desired.
-	/// <br/> If the Chlorophyte Extractinator item swapping behavior is desired, see the example in ExampleAdvancedFlail.cs.
-	/// <br/> 
-	/// <br/> This method is not instanced.
+	/// Allows you to modify what item, and in what quantity, is obtained when any item belonging to the extractinator type corresponding to this item is fed into the Extractinator. Use <see cref="ItemID.Sets.ExtractinatorMode"/> to allow an item to be fed into the Extractinator.
+	/// <para/> This method is only called if <c>ItemID.Sets.ExtractinatorMode[Item.type] = Item.type;</c> in used in SetStaticDefaults. Other items belonging to the same extractinator group should use <c>ItemID.Sets.ExtractinatorMode[Item.type] = ModContent.ItemType&lt;IconicItemForThisExtractinatorType&gt;();</c> to indicate that they share the same extractinator output pool and to avoid code duplication.
+	/// <para/> By default the parameters will be set to the output of feeding Silt/Slush into the Extractinator.
+	/// <para/> Use <paramref name="extractinatorBlockType"/> to provide different behavior for <see cref="TileID.ChlorophyteExtractinator"/> if desired.
+	/// <para/> If the Chlorophyte Extractinator item swapping behavior is desired, see the example in <see href="https://github.com/tModLoader/tModLoader/blob/stable/ExampleMod/Common/GlobalItems/TorchExtractinatorGlobalItem.cs">TorchExtractinatorGlobalItem.cs</see>.
+	/// <para/> This method is not instanced.
 	/// </summary>
 	/// <param name="extractinatorBlockType">Which Extractinator tile is being used, <see cref="TileID.Extractinator"/> or <see cref="TileID.ChlorophyteExtractinator"/>.</param>
 	/// <param name="resultType">Type of the result.</param>
@@ -1177,12 +1210,12 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to tell the game whether this item is a torch that cannot be placed in liquid, a torch that can be placed in liquid, or a glowstick. This information is used for when the player is holding down the auto-select keybind.
+	/// If this item is a fishing pole, allows you to modify the origin and color of its fishing line.
 	/// </summary>
-	/// <param name="dryTorch">if set to <c>true</c> [dry torch].</param>
-	/// <param name="wetTorch">if set to <c>true</c> [wet torch].</param>
-	/// <param name="glowstick">if set to <c>true</c> [glowstick].</param>
-	public virtual void AutoLightSelect(ref bool dryTorch, ref bool wetTorch, ref bool glowstick)
+	/// <param name="bobber">The bobber projectile</param>
+	/// <param name="lineOriginOffset"> The offset of the fishing line's origin from the player's center. </param>
+	/// <param name="lineColor"> The fishing line's color, before being overridden by string color accessories. </param>
+	public virtual void ModifyFishingLine(Projectile bobber, ref Vector2 lineOriginOffset, ref Color lineColor)
 	{
 	}
 
@@ -1272,7 +1305,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	/// Allows you to make anything happen when the player crafts this item using the given recipe.
 	/// </summary>
 	/// <param name="recipe">The recipe that was used to craft this item.</param>
-	[Obsolete("Use OnCreate and check if context is RecipeCreationContext", true)]
+	[Obsolete("Use OnCreate and check if context is RecipeItemCreationContext", true)]
 	public virtual void OnCraft(Recipe recipe)
 	{
 	}
@@ -1317,7 +1350,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// Allows you to modify all the tooltips that display for this item. See here for information about TooltipLine.
+	/// Allows you to modify all the tooltips that display for this item. See here for information about TooltipLine. To hide tooltips, please use <see cref="TooltipLine.Hide"/> and defensive coding.
 	/// </summary>
 	/// <param name="tooltips">The tooltips.</param>
 	public virtual void ModifyTooltips(List<TooltipLine> tooltips)

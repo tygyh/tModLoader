@@ -8,6 +8,8 @@ using System.Threading;
 using Terraria.Localization;
 using Terraria.ModLoader.Core;
 using Terraria.ModLoader.Engine;
+using Terraria.ModLoader.UI;
+using Terraria.Utilities;
 
 namespace Terraria.ModLoader;
 
@@ -24,6 +26,7 @@ public static partial class Logging
 	private static readonly HashSet<string> pastExceptions = new();
 	private static readonly HashSet<string> ignoreTypes = new() {
 		"ReLogic.Peripherals.RGB.DeviceInitializationException",
+		"System.Threading.Tasks.TaskCanceledException",
 	};
 	private static readonly HashSet<string> ignoreSources = new() {
 		"MP3Sharp",
@@ -38,6 +41,9 @@ public static partial class Logging
 		"Terraria.Net.Sockets.TcpSocket.Terraria.Net.Sockets.ISocket.AsyncSend", // client disconnects from server
 		"System.Diagnostics.Process.Kill", // attempt to kill non-started process when joining server
 		"UwUPnP", // UPnP does a lot of trial and error
+		"System.Threading.CancellationTokenSource.Cancel", // an operation (task) was deliberately cancelled
+		"System.Net.Http.HttpConnectionPool.AddHttp11ConnectionAsync", // Async connection errors thrown on the thread pool. These get bounced back to the caller continuation and can be logged there
+		"ReLogic.Peripherals.RGB.SteelSeries.GameSenseConnection._sendMsg",
 	};
 	// There are a couple of annoying messages that happen during cancellation of asynchronous downloads, and they have no other useful info to suppress by
 	private static readonly List<string> ignoreMessages = new() {
@@ -50,11 +56,12 @@ public static partial class Logging
 		"Unable to load DLL 'Microsoft.DiaSymReader.Native.x86.dll'", // Roslyn
 	};
 	private static readonly List<string> ignoreThrowingMethods = new() {
+		"MonoMod.Utils.Interop.Unix.DlError", // MonoMod trying to find the right version of libdl and falling back on DLLNotFoundException
 		"System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException", // connection lost during socket operation
 		"Terraria.Lighting.doColors_Mode", // vanilla lighting which bug randomly happens
 		"System.Threading.CancellationToken.Throw", // an operation (task) was deliberately cancelled
 	};
-	
+
 	private static Exception previousException;
 
 	public static void IgnoreExceptionSource(string source)
@@ -88,6 +95,7 @@ public static partial class Logging
 		bool oom = args.Exception is OutOfMemoryException;
 		if (oom) {
 			TryFreeingMemory();
+			Logging.tML.Info($"tModLoader RAM usage during OutOfMemoryException: {UIMemoryBar.SizeSuffix(Process.GetCurrentProcess().PrivateMemorySize64)}");
 		}
 
 		try {
@@ -102,7 +110,7 @@ public static partial class Logging
 				}
 			}
 
-			var stackTrace = new StackTrace(true);
+			var stackTrace = new StackTrace(skipFrames: 1, fNeedFileInfo: true);
 			var traceString = stackTrace.ToString();
 
 			if (!oom && ignoreContents.Any(s => MatchContents(traceString, s)))
@@ -123,17 +131,24 @@ public static partial class Logging
 			previousException = args.Exception;
 
 			string msg = args.Exception.Message + " " + Language.GetTextValue("tModLoader.RuntimeErrorSeeLogsForFullTrace", Path.GetFileName(LogPath));
-			if (Main.dedServ) { // TODO, sometimes console write fails on unix clients. Hopefully it doesn't happen on servers? System.IO.IOException: Input/output error at System.ConsolePal.Write
+			// Solxan: We are using Program.SavePathShared == null as a flag to indicate Main CCtor can't run. 
+			if (Program.SavePathShared == null || Main.dedServ) { // TODO, sometimes console write fails on unix clients. Hopefully it doesn't happen on servers? System.IO.IOException: Input/output error at System.ConsolePal.Write
 				Console.ForegroundColor = ConsoleColor.DarkMagenta;
 				Console.WriteLine(msg);
 				Console.ResetColor();
 			}
-			else if (ModCompile.activelyModding && !Main.gameMenu) {
+			// Solxan: We are using Program.SavePathShared == null as a flag to indicate ModCompile CCtor can't run. 
+			else if (Program.SavePathShared != null && ModCompile.activelyModding && !Main.gameMenu) {
 				AddChatMessage(msg);
 			}
 
 			if (oom) {
 				ErrorReporting.FatalExit(Language.GetTextValue("tModLoader.OutOfMemory"));
+			}
+
+			if (args.Exception.Data.Contains("dump") && args.Exception.Data["dump"] is string opt) {
+				args.Exception.Data.Remove("dump");
+				CrashDump.WriteException(opt switch { "full" => CrashDump.Options.WithFullMemory, _ => CrashDump.Options.Normal });
 			}
 		}
 		catch (Exception e) {
@@ -153,8 +168,8 @@ public static partial class Logging
 			if (sep < 0)
 				return true;
 
-			traceString = traceString[(f+m.Length)..];
-			contentPattern = contentPattern[(sep+2)..];
+			traceString = traceString[(f + m.Length)..];
+			contentPattern = contentPattern[(sep + 2)..];
 		}
 	}
 }

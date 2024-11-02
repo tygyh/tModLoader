@@ -1,6 +1,6 @@
-using System;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using System;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -60,10 +60,19 @@ namespace ExampleMod.Content.Items.Accessories
 			// Here we add an additional effect
 			player.GetModPlayer<WaspNestPlayer>().strongBeesUpgrade = true;
 		}
+
+		public override bool CanAccessoryBeEquippedWith(Item equippedItem, Item incomingItem, Player player) {
+			// Don't allow Hive Pack and Wasp Nest to be equipped at the same time.
+			return incomingItem.type != ItemID.HiveBackpack;
+		}
 	}
 
 	public class WaspNestPlayer : ModPlayer
 	{
 		public bool strongBeesUpgrade;
+
+		public override void ResetEffects() {
+			strongBeesUpgrade = false;
+		}
 	}
 }
