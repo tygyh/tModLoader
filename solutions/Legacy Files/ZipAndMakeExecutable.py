@@ -16,29 +16,48 @@ def set_permissions(tarinfo):
         tarinfo.mode = 0o777
     return tarinfo
 
-def zipdir(path, ziph):
-    # ziph is zipfile handle
-    for root, dirs, files in os.walk(path):
-        for filename in files:
-            file = os.path.join(root, filename)
-            destination = os.path.relpath(file, path)
-            if extra:
-                destination = os.path.join(extra, destination)
-            print("Zipping " + file)
-            if (filename in executables):
-                f = open(file, 'br')
-                bytes = f.read()
-                f.close()
+
+def zipdir(path, filename):
+    # Ensure the base path is absolute
+    base_path = os.path.abspath(path)
+
+    # Prevent path traversal for the ZIP file itself
+    filename = os.path.abspath(filename)
+    if not filename.startswith(base_path):
+        raise ValueError(f"Path traversal attempt detected for zipfile: {filename}")
+
+    # Create the ZIP file
+    with zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED) as ziph:
+        # ziph is zipfile handle
+        for root, dirs, files in os.walk(base_path):
+            for filename in files:
+                file = os.path.join(root, filename)
+                destination = os.path.relpath(file, base_path)
+                if extra:
+                    destination = os.path.join(extra, destination)
+
+                # Prevent path traversal by validating the destination
+                if not os.path.abspath(os.path.join(base_path, destination)).startswith(base_path):
+                    raise ValueError(f"Path traversal attempt detected: {destination}")
+
+                # Prevent symlink traversal by validating the resolved file path
+                real_file = os.path.realpath(file)
+                if not real_file.startswith(base_path):
+                    raise ValueError(f"Symlink traversal attempt detected: {real_file}")
                 
-                info = zipfile.ZipInfo(destination)
-                info.date_time = time.localtime()
-                #info.external_attr |= 0o755 << 
-                info.external_attr = 0o100777 << 16
-                print("Execute permissions set for " + file)
-                
-                ziph.writestr(info, bytes, zipfile.ZIP_DEFLATED)
-            else:
-                ziph.write(file, destination)
+                print("Zipping " + file)
+                if executables and filename in executables:
+                    with open(real_file, 'rb') as f:
+                        bytes_content = f.read()
+                    
+                    info = zipfile.ZipInfo(destination)
+                    info.date_time = time.localtime()[:6]
+                    info.external_attr = 0o100777 << 16
+                    print("Execute permissions set for " + file)
+                    
+                    ziph.writestr(info, bytes_content, zipfile.ZIP_DEFLATED)
+                else:
+                    ziph.write(real_file, destination)
             
 if __name__ == '__main__':
     if(len(sys.argv) != 3 and len(sys.argv) != 4):
